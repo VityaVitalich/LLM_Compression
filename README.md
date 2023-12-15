@@ -15,4 +15,4 @@ Evaluation FrameWork = https://github.com/EleutherAI/lm-evaluation-harness/
 
 | Model         | WinoGrande    | Swag         | HellaSwag    | Xwinograd    | BoolQ        |
 | ------------- | ------------- |------------- |------------- |------------- |------------- |
-| Llama2-7b     | 0.69          |              | -  | -  | -  |
+| Llama2-7b     | 0.69          | 0.75 normed    |   | -  | -  |
