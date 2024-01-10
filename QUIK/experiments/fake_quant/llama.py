@@ -150,12 +150,16 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 # Extract the number of outliers
                 if args.fp_relative:
                     outlier_num = int(subset[name].in_features/model.config.hidden_size)*args.fp_features
+                    print(subset[name].in_features, model.config.hidden_size, outlier_num)
                 else:
                     outlier_num = args.fp_features
                 
                 layer_scales = None
                 if outlier_num > 0:
+ #                   print(act_scales)
                     layer_scales = act_scales['model.layers.{}.{}'.format(i, name)]
+#                    print(layer_scales)
+
                     max_val = layer_scales.abs().max()
                     fp_threshold = args.fp_threshold
 
@@ -165,6 +169,8 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                     if max_val <= fp_threshold:
                         outlier_num = 0
                         layer_scales = None
+                  #  print(layer_scales)
+                   # return 'aaa'
                 if args.sparseGPT:
                     modules_quik[name] = sparseGPT_utils.SparseGPT(
                     layer=subset[name],
