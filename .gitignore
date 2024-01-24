@@ -1,5 +1,6 @@
 logs/
 figs/
+wandb/
 
 
 # Byte-compiled / optimized / DLL files
