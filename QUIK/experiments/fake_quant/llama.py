@@ -361,9 +361,9 @@ if __name__ == '__main__':
             wandb.log({'zero_outlier_linear': number_of_zero_outlier_linear})
         print(f'{number_of_zero_outlier_linear} layers with zero outliers.\n')
 
-    save_path = f"/home/data/compression/quik_cache/llama7b_{args.w_bits}w_{args.a_bits}a_{args.fp_features}fp.pt"
+    save_path = f"/home/compression/quik_cache/llama7b_{args.w_bits}w_{args.a_bits}a_{args.fp_features}fp_true.pt"
     torch.save(model, save_path)
-    datasets = ['wikitext2'] 
+    datasets = ['wikitext2']
     for dataset in datasets:
         dataloader, testloader = datautils.get_loaders(
             dataset, seed=args.seed, model=args.model, seqlen=model.seqlen, hf_token=args.hf_token

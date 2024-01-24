@@ -15,7 +15,7 @@ def symmetric_quantize(x, scale, bits):
     elif bits == 8:
         q = torch.clamp(torch.round(x / scale), -128, 127)
     elif bits == 2:
-        q = torch.clamp(torch.round(x / scale), -4, 3)
+        q = torch.clamp(torch.round(x / scale), -2, 1)
     return scale * q
 
 class WeightQuantizer(torch.nn.Module):
@@ -37,7 +37,7 @@ class WeightQuantizer(torch.nn.Module):
         self.bits = bits
         if sym:
             if self.bits == 2:
-                self.maxq = torch.tensor(3)
+                self.maxq = torch.tensor(1)
             elif self.bits == 4:
                 self.maxq = torch.tensor(7)
             elif self.bits == 8:
@@ -48,7 +48,7 @@ class WeightQuantizer(torch.nn.Module):
                 raise ValueError('Only 2/4/8-bit is supported!')
         else:
             if self.bits == 2:
-                self.maxq = torch.tensor(7)
+                self.maxq = torch.tensor(3)
             elif self.bits == 4:
                 self.maxq = torch.tensor(15)
             elif self.bits == 8:
