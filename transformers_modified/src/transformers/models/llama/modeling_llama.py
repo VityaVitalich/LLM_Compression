@@ -755,8 +755,8 @@ class LlamaSdpaAttention(LlamaAttention):
 
 LLAMA_ATTENTION_CLASSES = {
     "eager": LlamaAttention,
-    "flash_attention_2": LlamaFlashAttention2,
-    "sdpa": LlamaSdpaAttention,
+    "flash_attention_2": LlamaAttention, #LlamaFlashAttention2,
+    "sdpa": LlamaAttention #LlamaSdpaAttention,
 }
 
 
