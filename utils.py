@@ -126,6 +126,12 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
 
+    dataset_percentage: Optional[int] = field(
+        default=100,
+        metadata={"help": "The number of percentage to take from entire dataset"},
+    )
+
+
 def load_hf_datasets(
     data_args
 ):
@@ -150,6 +156,13 @@ def load_hf_datasets(
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 streaming=data_args.streaming,
             )
+
+    if data_args.dataset_percentage < 100: 
+        dataset_frac = data_args.dataset_percentage/100
+        dataset_parts = raw_datasets['train'].train_test_split(train_size=dataset_frac)
+        raw_datasets['train'] = dataset_parts['train']
+        dataset_parts = raw_datasets['validation'].train_test_split(test_size=dataset_frac)
+        raw_datasets['validation'] = dataset_parts['test']
         
         return raw_datasets
 
@@ -258,6 +271,35 @@ class DataCollatorWithMaskForCausalLM(object):
             data_dict['labels'] = labels
         return data_dict
     
+
+@torch.no_grad()   
+def create_mask(weight, outlier_fraction):
+
+    w = torch.clone(weight) 
+    w_flat = w.view(-1) 
+    lower_threshold, upper_threshold = ( 
+        torch.kthvalue( 
+            w_flat, 
+            int(w_flat.numel() * outlier_fraction / 2), 
+        )[0], 
+        torch.kthvalue( 
+            w_flat, 
+            int(w_flat.numel() * (1 - outlier_fraction / 2)), 
+        )[0], 
+    ) 
+
+    outliers = (w < lower_threshold) | (w > upper_threshold) 
+
+    return ~outliers.detach()
+
+
+def make_zero_outliers(model, outlier_fraction):
+    for name, param in tqdm(model.named_parameters()):
+        if 'layers' in name:
+            mask = create_mask(param.data, outlier_fraction)
+            param.data *= mask.to(param.data.device)
+
+
 def run_train(
     model_args,
     data_args,
@@ -266,12 +308,20 @@ def run_train(
 ):
     
     # Load pretrained model
-    model = LlamaForCausalLM.from_pretrained(
+    if config.model_type == 'Llama':
+        model_type = LlamaForCausalLM
+    else:
+        model_type = AutoModelForCausalLM
+    
+    model = model_type.from_pretrained(
         model_args.model_name_or_path,
         torch_dtype=torch.bfloat16,
         token=model_args.token,
         cache_dir=model_args.cache_dir
     )
+    
+    if config.zero_outliers:
+        make_zero_outliers(model, config.outlier_fraction)
 
     if config.use_clip_softmax:
         model.set_clipped_sm(gamma=config.clip_softmax_gamma, eta=config.clip_softmax_eta)
@@ -334,6 +384,7 @@ def run_train(
 
     print(f"trainable_params: {trainable_params}")
 
+    
     #Train
     train_dataset = lm_datasets["train"]
     eval_dataset = lm_datasets["validation"]
@@ -376,7 +427,8 @@ def main():
         dataset_name = config.data.dataset_name,
         dataset_config_name = config.data.dataset_config_name,
         validation_split_percentage = config.data.valid_split,
-        block_size = config.data.block_size
+        block_size = config.data.block_size,
+        dataset_percentage = config.data.dataset_percentage
     )
 
     model_args = ModelArguments(
@@ -392,23 +444,25 @@ def main():
 
 
     training_args = TrainingArguments(
-        output_dir = config.output_dir, #"./exp_results/wikitext-2/",
+        output_dir = config.output_dir,
         overwrite_output_dir = True,
-        learning_rate = config.learning_rate, #3e-4,
-        seed = config.seed, #11,
+        learning_rate = config.learning_rate, 
+        seed = config.seed, 
         num_train_epochs = config.num_train_epochs, #3,
         per_device_train_batch_size = config.per_device_train_batch_size, #2,
         per_device_eval_batch_size = config.per_device_eval_batch_size, #2,
         gradient_accumulation_steps = config.gradient_accumulation_steps, #16,
         gradient_checkpointing=config.gradient_checkpointing, #False,
-        save_strategy = "epoch",
+        save_strategy = config.save_strategy,
+        save_steps = config.save_steps,
+        evaluation_strategy = config.evaluation_strategy,
+        eval_steps = config.eval_steps,
         weight_decay = config.weight_decay, #0.1,
         warmup_ratio = 0.03,
         lr_scheduler_type = "cosine",
         logging_steps = 1,
         do_train = True,
         do_eval = True,
-        # report_to = "tensorboard"
         report_to = config.report_to,
         run_name=config.run_name
     )
