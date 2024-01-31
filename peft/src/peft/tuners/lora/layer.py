@@ -79,6 +79,7 @@ class LoraLayer(BaseTunerLayer):
             quant_noise_config = self.kwargs["quant_noise_config"]
             self.quant_bit = quant_noise_config["quant_bit"]
             self.quant_block_size = quant_noise_config["quant_block_size"]
+            self.outliers_fraction = quant_noise_config["outliers_fraction"]
             self.quant_range_params = self.get_quant_range_params(
                 self.base_layer, 
                 self.quant_block_size
@@ -86,13 +87,40 @@ class LoraLayer(BaseTunerLayer):
         else:
             self.add_quant_noize = False
 
+    def get_outliers_mask(self, weight, outlier_fraction):
+        with torch.no_grad():
+            w = weight
+            w_flat = w.view(-1).clone().float()
+            lower_threshold, upper_threshold = (
+                torch.kthvalue(
+                    w_flat,
+                    int(w_flat.numel() * outlier_fraction / 2),
+                )[0],
+                torch.kthvalue(
+                    w_flat,
+                    int(w_flat.numel() * (1 - outlier_fraction / 2)),
+                )[0],
+            )
+
+            outliers = (w < lower_threshold) | (w > upper_threshold)
+
+        outliers_mask = outliers.detach()
+
+        return outliers_mask
+
     def get_quant_range_params(
         self,
         layer_in,
         block_size = None
     ):  
-        weight_in = layer_in.weight
+        weight_in = layer_in.weight.detach().clone()
         cols_num = layer_in.in_features
+
+        if self.outliers_fraction > 0:
+            outliers_mask = self.get_outliers_mask(weight_in, self.outliers_fraction)
+            weight_mask = ~outliers_mask
+            weight_in = weight_mask * weight_in
+
 
         if (block_size is None) or (block_size == 0) or (block_size >= cols_num):
             range_params = weight_in.max(dim=0)[0] - weight_in.min(dim=0)[0]
