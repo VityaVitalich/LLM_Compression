@@ -372,8 +372,6 @@ def run_train(
     )
 
     train_result = trainer.train()
-
-    train_result = trainer.train()
     trainer.save_model()  # Saves the tokenizer too for easy upload
 
 def read_config(conf_path, func_name: str):
