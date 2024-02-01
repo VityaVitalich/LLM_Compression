@@ -24,7 +24,7 @@ def model_configs():
     config.model_name_or_path = '/home/projects/LLaMA/huggingface/Llama-2-7b-hf'
     config.model_config_name = None
     config.tokenizer_name = None
-    config.token = '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'
+    config.token = 'YOUR TOKEN'
     config.use_fast_tokenizer = True
     config.trust_remote_code = True
 
