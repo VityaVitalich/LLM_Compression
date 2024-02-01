@@ -69,7 +69,7 @@ def model_configs():
     config.quant_noise_config = {"quant_bit": 2, "quant_block_size": 128, "outliers_fraction": 0.03}
 
     ### NORM TWEEKING ###
-    config.norm_tweek = False
+    config.norm_tweek = True
 
 
     ### ZERO OUTLIERS ###
