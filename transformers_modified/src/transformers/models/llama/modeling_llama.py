@@ -435,9 +435,11 @@ class LlamaAttention(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = clipped_softmax(attn_weights, dim=-1, gamma=self.clip_softmax_gamma, eta=self.clip_softmax_eta, dtype=torch.float32).to(query_states.dtype)
-       # attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        clipped_attn_weights = clipped_softmax(attn_weights, dim=-1, gamma=self.clip_softmax_gamma, eta=self.clip_softmax_eta, dtype=torch.float32).to(query_states.dtype)
+        #regular_attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        #if not (torch.isclose(clipped_attn_weights, regular_attn_weights).all()):
+         #   print('not consistent')
+        attn_weights = nn.functional.dropout(clipped_attn_weights, p=self.attention_dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -1136,7 +1138,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         for layer in self.model.layers:
             layer.self_attn.clip_softmax_eta = eta
             layer.self_attn.clip_softmax_gamma = gamma
-
+        self.model.config.clip_softmax_gamma = gamma
+        self.model.config.clip_softmax_eta = eta
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
