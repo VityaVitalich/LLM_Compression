@@ -308,12 +308,12 @@ def run_train(
 ):
     
     # Load pretrained model
-    if config.model_type == 'Llama':
-        model_type = LlamaForCausalLM
-    else:
-        model_type = AutoModelForCausalLM
+    # if config.model_type == 'Llama':
+    #     model_type = LlamaForCausalLM
+    # else:
+    #     model_type = AutoModelForCausalLM
     
-    model = model_type.from_pretrained(
+    model = AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         torch_dtype=torch.bfloat16,
         token=model_args.token,
@@ -419,9 +419,10 @@ def read_config(conf_path, func_name: str):
 def main():
     parser = ArgumentParser()
     parser.add_argument("--config_path", help="path_to_conifg", required=True)
-
+    parser.add_argument("--local-rank", type=int)
     args = parser.parse_args()
     config = read_config(args.config_path, 'model_configs')
+    torch.cuda.set_device(args.local_rank)
 
     data_args = DataTrainingArguments(
         dataset_name = config.data.dataset_name,

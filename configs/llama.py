@@ -10,11 +10,11 @@ def model_configs():
     data.dataset_name = 'togethercomputer/RedPajama-Data-1T-Sample'
     data.dataset_config_name = None
     data.valid_split = 5
-    data.block_size = 256
-    data.dataset_percentage = 5
+    data.block_size = 128
+    data.dataset_percentage = 1
 
     ### MODEL CHECKPOINT ###
-    config.model_type = 'Llama'
+    config.model_type = 'Auto'
     config.model_name_or_path = 'meta-llama/Llama-2-7b-hf'
     config.model_config_name = None
     config.tokenizer_name = None
