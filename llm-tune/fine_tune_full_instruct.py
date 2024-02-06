@@ -1,34 +1,43 @@
-import os
-from typing import Optional, Dict, Sequence
 from argparse import ArgumentParser
+import logging
+import math
+import os
+import random
+import shutil
 from pathlib import Path
-import copy
 
 from dataclasses import dataclass, field
-from itertools import chain
+from typing import Optional, Dict, Sequence
 
-import numpy as np
+import datasets
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pad_sequence
 
-import datasets
-from datasets import load_dataset, Dataset
-import pandas as pd
+from functools import partial
+from accelerate import Accelerator
+from accelerate.checkpointing import save_accelerator_state
+from accelerate.logging import get_logger
+from accelerate.utils import set_seed
+from datasets import load_dataset
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 
 import transformers
 from transformers import (
-    AutoTokenizer,
     AutoModelForCausalLM,
+    AutoTokenizer,
+    LlamaTokenizer,
+    LlamaTokenizerFast,
     Trainer,
-    TrainingArguments,
-    default_data_collator,
-    DataCollatorForLanguageModeling,
-    Seq2SeqTrainer
+    DataCollatorForSeq2Seq,
+    TrainingArguments
 )
-
-from peft import PeftModel, get_peft_model, TaskType, LoraConfig
+from peft import (
+    get_peft_model,
+    TaskType,
+    LoraConfig
+)
 
 IGNORE_INDEX = -100
 
@@ -151,57 +160,138 @@ class DataTrainingArguments:
 
 
 @dataclass
-class DataCollatorForCausalLM(object):
-    tokenizer: transformers.PreTrainedTokenizer
-    source_max_len: int
-    target_max_len: int
-    train_on_source: bool
-    predict_with_generate: bool
+class ModelArguments:
+    """
+    Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
+    """
+    model_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
+            )
+        },
+    )
+    config_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+    )
+    tokenizer_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+    )
+    cache_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+    )
+    use_fast_tokenizer: bool = field(
+        default=False,
+        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+    )
+    model_revision: str = field(
+        default="main",
+        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+    )
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
+    torch_dtype: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
+                "dtype will be automatically derived from the model's weights."
+            ),
+            "choices": ["auto", "bfloat16", "float16", "float32"],
+        },
+    )
+    max_memory: int = field(
+        default=21,
+        metadata={"help": "Free memory per gpu."}
+    )
+    lora_init: bool = field(
+        default=False,
+        metadata={"help": "True: Use zero and gaussian initialization; False: Load adapters from LoftQ in HF hub."},
+    )
+    rank: int = field(
+        default=64,
+        metadata={"help": "Rank of LoRA adapters. LoftQ does not require this config. Used for fp16 LoRA or QLoRA."},
+    )
+    lora_alpha: int = field(
+        default=16,
+        metadata={"help": "LoftQ does not require this config. Used for QLoRA."},
+    )
+    quant_noise_config: dict = field(
+        default=None,
+        metadata={"help": "Parameters to add noise"},
+    )
 
-    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
-        # Extract elements
-        sources = [f"{self.tokenizer.bos_token}{example['input']}" for example in instances]
-        targets = [f"{example['output']}{self.tokenizer.eos_token}" for example in instances]
-        # Tokenize
-        tokenized_sources_with_prompt = self.tokenizer(
-            sources,
-            max_length=self.source_max_len,
-            truncation=True,
-            add_special_tokens=False,
-        )
-        tokenized_targets = self.tokenizer(
-            targets,
-            max_length=self.target_max_len,
-            truncation=True,
-            add_special_tokens=False,
-        )
-        # Build the input and labels for causal LM
-        input_ids = []
-        labels = []
-        for tokenized_source, tokenized_target in zip(
-            tokenized_sources_with_prompt['input_ids'],
-            tokenized_targets['input_ids']
-        ):
-            if not self.predict_with_generate:
-                input_ids.append(torch.tensor(tokenized_source + tokenized_target))
-                if False:
-                    labels.append(
-                        torch.tensor([IGNORE_INDEX for _ in range(len(tokenized_source))] + copy.deepcopy(tokenized_target))
-                    )
-                else:
-                    labels.append(torch.tensor(copy.deepcopy(tokenized_source + tokenized_target)))
-            else:
-                input_ids.append(torch.tensor(tokenized_source))
-        # Apply padding
-        input_ids = pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
-        labels = pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX) if not self.predict_with_generate else None
-        data_dict = {
-            'input_ids': input_ids,
-            'attention_mask':input_ids.ne(self.tokenizer.pad_token_id),
-        }
-        if labels is not None:
-            data_dict['labels'] = labels
-        return data_dict
+@dataclass
+class DataTrainingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+    """
+
+    dataset_name: Optional[str] = field(
+        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+    )
+    dataset_config_name: Optional[str] = field(
+        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom dataset defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
+    streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
+    max_seq_length: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Optional input sequence length after tokenization. "
+                "The training dataset will be truncated in block of this size for training. "
+                "Default to the model max input length for single sentence inputs (take into account special tokens)."
+            )
+        },
+    )
+    overwrite_cache: bool = field(
+        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
+    dataset_percentage: Optional[int] = field(
+        default=100,
+        metadata={
+            "help": "The percentage of the dataset used for computation"
+        },  
+    )
+    validation_split_percentage: Optional[int] = field(
+        default=5,
+        metadata={
+            "help": "The percentage of the train set used as validation set in case there's no validation split"
+        },
+    )
+    preprocessing_num_workers: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
+    )
 
 
 class LinearQuantNoise(nn.Module):
@@ -259,7 +349,8 @@ class LinearQuantNoise(nn.Module):
         in_features = self.weight.shape[1]
         block_size = self.quant_block_size
         quant_bit = self.quant_bit
-
+        
+        w_mask = w_mask.to(w.device)
         w = w_mask * w
 
         if (self.quant_block_size == 0):
@@ -315,181 +406,141 @@ def get_fp_inds_for_quik(path_to_act_scales, fp_features_num):
     fp_indices_in_lin_layers = {k: torch.sort(v)[1][-fp_features_num:] for k, v in act_scales.items()}
     return fp_indices_in_lin_layers
 
-def extract_unnatural_instructions_data(examples, extract_reformulations=False):
-    out = {
-        'input': [],
-        'output': [],
+def encode_with_prompt_completion_format(example, tokenizer, max_seq_length):
+    '''
+    Here we assume each example has 'prompt' and 'completion' fields.
+    We concatenate prompt and completion and tokenize them together because otherwise prompt will be padded/trancated 
+    and it doesn't make sense to follow directly with the completion.
+    '''
+    # if prompt doesn't end with space and completion doesn't start with space, add space
+    if not example['prompt'].endswith((' ', '\n', '\t')) and not example['completion'].startswith((' ', '\n', '\t')):
+        example_text = example['prompt'] + ' ' + example['completion']
+    else:
+        example_text = example['prompt'] + example['completion']
+    example_text = example_text + tokenizer.eos_token
+    tokenized_example = tokenizer(example_text, return_tensors='pt', max_length=max_seq_length, truncation=True)
+    input_ids = tokenized_example.input_ids
+    labels = input_ids.clone()
+    tokenized_prompt = tokenizer(example['prompt'], return_tensors='pt', max_length=max_seq_length, truncation=True)
+    # mask the prompt part for avoiding loss
+    labels[:, :tokenized_prompt.input_ids.shape[1]] = -100
+    attention_mask = torch.ones_like(input_ids)
+    return {
+        'input_ids': input_ids.flatten(),
+        'labels': labels.flatten(),
+        'attention_mask': attention_mask.flatten(),
     }
-    for example_instances in examples['instances']:
-        for instance in example_instances:
-            out['input'].append(instance['instruction_with_input'])
-            out['output'].append(instance['output'])
-    if extract_reformulations:
-        for example_reformulations in examples['reformulations']:
-            if example_reformulations is not None:
-                for instance in example_reformulations:
-                    out['input'].append(instance['instruction_with_input'])
-                    out['output'].append(instance['output'])
-    return out
 
-ALPACA_PROMPT_DICT = {
-    "prompt_input": (
-        "Below is an instruction that describes a task, paired with an input that provides further context. "
-        "Write a response that appropriately completes the request.\n\n"
-        "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response: "
-    ),
-    "prompt_no_input": (
-        "Below is an instruction that describes a task. "
-        "Write a response that appropriately completes the request.\n\n"
-        "### Instruction:\n{instruction}\n\n### Response: "
-    ),
-}
-
-def extract_alpaca_dataset(example):
-    if example.get("input", "") != "":
-        prompt_format = ALPACA_PROMPT_DICT["prompt_input"]
-    else:
-        prompt_format = ALPACA_PROMPT_DICT["prompt_no_input"]
-    return {'input': prompt_format.format(**example)}
-
-def local_dataset(dataset_name):
-    if dataset_name.endswith('.json') or dataset_name.endswith('.jsonl'):
-        full_dataset = Dataset.from_json(path_or_paths=dataset_name)
-    elif dataset_name.endswith('.csv'):
-        full_dataset = Dataset.from_pandas(pd.read_csv(dataset_name))
-    elif dataset_name.endswith('.tsv'):
-        full_dataset = Dataset.from_pandas(pd.read_csv(dataset_name, delimiter='\t'))
-    else:
-        raise ValueError(f"Unsupported dataset format: {dataset_name}")
-
-    split_dataset = full_dataset.train_test_split(test_size=0.1)
-    return split_dataset
-
-def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
-    """
-    Make dataset and collator for supervised fine-tuning.
-    Datasets are expected to have the following columns: { `input`, `output` }
-
-    Available datasets to be selected with `dataset` argument:
-        - alpaca, 52002 examples
-        - alpaca cleaned, 51942 examples
-        - chip2 (OIG), 210289 examples
-        - self-instruct, 82612 examples
-        - hh-rlhf (Anthropic), 160800 examples
-        - longform, 23.7k examples
-        - oasst1 (OpenAssistant) primary message tree only, 9,846 examples
-
-    Coming soon:
-        - unnatural instructions core, 66010 examples
-        - unnatural instructions full, 240670 examples
-        - alpaca-gpt4, 52002 examples
-        - unnatural-instructions-gpt4, 9000 examples
-        - supernatural-instructions, 69624 examples (same as paper with 100 ex/task more can be used)
-        - flan (FLAN v2), up to 20M examples available
-        - vicuna
-
-    """
-    def load_data(dataset_name):
-        if dataset_name == 'alpaca':
-            return load_dataset("tatsu-lab/alpaca")
-        elif dataset_name == 'alpaca-clean':
-            return load_dataset("yahma/alpaca-cleaned")
-        elif dataset_name == 'chip2':
-            return load_dataset("laion/OIG", data_files='unified_chip2.jsonl')
-        elif dataset_name == 'self-instruct':
-            return load_dataset("yizhongw/self_instruct", name='self_instruct')
-        elif dataset_name == 'hh-rlhf':
-            return load_dataset("Anthropic/hh-rlhf")
-        elif dataset_name == 'longform':
-            return load_dataset("akoksal/LongForm")
-        elif dataset_name == 'oasst1':
-            return load_dataset("timdettmers/openassistant-guanaco")
-        elif dataset_name == 'vicuna':
-            raise NotImplementedError("Vicuna data was not released.")
-        else:
-            if os.path.exists(dataset_name):
-                try:
-                    args.dataset_format = args.dataset_format if args.dataset_format else "input-output"
-                    full_dataset = local_dataset(dataset_name)
-                    return full_dataset
-                except:
-                    raise ValueError(f"Error loading dataset from {dataset_name}")
-            else:
-                raise NotImplementedError(f"Dataset {dataset_name} not implemented yet.")
-
-    def format_dataset(dataset, dataset_format):
-        if (
-            dataset_format == 'alpaca' or dataset_format == 'alpaca-clean' or
-            (dataset_format is None and args.dataset in ['alpaca', 'alpaca-clean'])
-        ):
-            dataset = dataset.map(extract_alpaca_dataset, remove_columns=['instruction'])
-        elif dataset_format == 'chip2' or (dataset_format is None and args.dataset == 'chip2'):
-            dataset = dataset.map(lambda x: {
-                'input': x['text'].split('\n<bot>: ')[0].replace('<human>: ', ''),
-                'output': x['text'].split('\n<bot>: ')[1],
-            })
-        elif dataset_format == 'self-instruct' or (dataset_format is None and args.dataset == 'self-instruct'):
-            for old, new in [["prompt", "input"], ["completion", "output"]]:
-                dataset = dataset.rename_column(old, new)
-        elif dataset_format == 'hh-rlhf' or (dataset_format is None and args.dataset == 'hh-rlhf'):
-            dataset = dataset.map(lambda x: {
-                'input': '',
-                'output': x['chosen']
-            })
-        elif dataset_format == 'oasst1' or (dataset_format is None and args.dataset == 'oasst1'):
-            dataset = dataset.map(lambda x: {
-                'input': '',
-                'output': x['text'],
-            })
-        elif dataset_format == 'input-output':
-            # leave as is
-            pass
-        # Remove unused columns.
-        dataset = dataset.remove_columns(
-            [col for col in dataset.column_names['train'] if col not in ['input', 'output']]
-        )
-        return dataset
-
-     # Load dataset.
-    dataset = load_data(args.dataset)
-    dataset = format_dataset(dataset, args.dataset_format)
-
-    # Split train/eval, reduce size
-    # if args.do_eval or args.do_predict:
-    #     if 'eval' in dataset:
-    #         eval_dataset = dataset['eval']
-    #     else:
-    #         print('Splitting train dataset in train and validation according to `eval_dataset_size`')
-    #         dataset = dataset["train"].train_test_split(
-    #             test_size=args.eval_dataset_size, shuffle=True, seed=42
-    #         )
-    #         eval_dataset = dataset['test']
-    #     if args.max_eval_samples is not None and len(eval_dataset) > args.max_eval_samples:
-    #         eval_dataset = eval_dataset.select(range(args.max_eval_samples))
-    #     if args.group_by_length:
-    #         eval_dataset = eval_dataset.map(lambda x: {'length': len(x['input']) + len(x['output'])})
-
-    train_dataset = dataset['train']
-    if args.max_train_samples is not None and len(train_dataset) > args.max_train_samples:
-        train_dataset = train_dataset.select(range(args.max_train_samples))
-    if True:
-        train_dataset = train_dataset.map(lambda x: {'length': len(x['input']) + len(x['output'])})
-
-    data_collator = DataCollatorForCausalLM(
-        tokenizer=tokenizer,
-        source_max_len=args.source_max_len,
-        target_max_len=args.target_max_len,
-        train_on_source=False,
-        predict_with_generate=False,
-    )
-    return dict(
-        train_dataset=train_dataset if True else None,
-        eval_dataset=eval_dataset if False else None,
-        predict_dataset=eval_dataset if False else None,
-        data_collator=data_collator
-    )
-
+def encode_with_messages_format(example, tokenizer, max_seq_length):
+    '''
+    Here we assume each example has a 'messages' field Each message is a dict with 'role' and 'content' fields.
+    We concatenate all messages with the roles as delimiters and tokenize them together.
+    '''
+    messages = example['messages']
+    if len(messages) == 0:
+        raise ValueError('messages field is empty.')
     
+    def _concat_messages(messages):
+        message_text = ""
+        for message in messages:
+            if message["role"] == "system":
+                message_text += "<|system|>\n" + message["content"].strip() + "\n"
+            elif message["role"] == "user":
+                message_text += "<|user|>\n" + message["content"].strip() + "\n"
+            elif message["role"] == "assistant":
+                message_text += "<|assistant|>\n" + message["content"].strip() + tokenizer.eos_token + "\n"
+            else:
+                raise ValueError("Invalid role: {}".format(message["role"]))
+        return message_text
+        
+    example_text = _concat_messages(messages).strip()
+    tokenized_example = tokenizer(example_text, return_tensors='pt', max_length=max_seq_length, truncation=True)
+    input_ids = tokenized_example.input_ids
+    labels = input_ids.clone()
+
+    # mask the non-assistant part for avoiding loss
+    for message_idx, message in enumerate(messages):
+        if message["role"] != "assistant":
+            if message_idx == 0:
+                message_start_idx = 0
+            else:
+                message_start_idx = tokenizer(
+                    _concat_messages(messages[:message_idx]), return_tensors='pt', max_length=max_seq_length, truncation=True
+                ).input_ids.shape[1]
+            if message_idx < len(messages) - 1 and messages[message_idx+1]["role"] == "assistant":
+                # here we also ignore the role of the assistant
+                messages_so_far = _concat_messages(messages[:message_idx+1]) + "<|assistant|>\n"
+            else:
+                messages_so_far = _concat_messages(messages[:message_idx+1])
+            message_end_idx = tokenizer(
+                messages_so_far,
+                return_tensors='pt', 
+                max_length=max_seq_length, 
+                truncation=True
+            ).input_ids.shape[1]
+            labels[:, message_start_idx:message_end_idx] = -100
+            
+            if message_end_idx >= max_seq_length:
+                break
+
+    attention_mask = torch.ones_like(input_ids)
+    return {
+        'input_ids': input_ids.flatten(),
+        'labels': labels.flatten(),
+        'attention_mask': attention_mask.flatten(),
+    }
+
+def load_hf_datasets(
+    data_args
+):
+    # Load the dataset
+    if data_args.dataset_name is not None:
+        # Downloading and loading a dataset from the hub.
+        raw_datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            streaming=data_args.streaming,
+            trust_remote_code=data_args.trust_remote_code
+        )
+
+        if "validation" not in raw_datasets.keys():
+            raw_datasets["validation"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=f"train[:{data_args.validation_split_percentage}%]",
+                streaming=data_args.streaming,
+                trust_remote_code=data_args.trust_remote_code
+            )
+            raw_datasets["train"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=f"train[{data_args.validation_split_percentage}%:]",
+                streaming=data_args.streaming,
+                trust_remote_code=data_args.trust_remote_code
+            )
+        
+        if data_args.dataset_percentage < 100:
+            dataset_frac = data_args.dataset_percentage/100
+            dataset_parts = raw_datasets['train'].train_test_split(train_size=dataset_frac)
+            raw_datasets['train'] = dataset_parts['train']
+            dataset_parts = raw_datasets['validation'].train_test_split(test_size=dataset_frac)
+            raw_datasets['validation'] = dataset_parts['test']
+
+        return raw_datasets
+
+def read_config(conf_path, func_name: str):
+    if isinstance(conf_path, str):
+        conf_path = Path(conf_path)
+
+    source = conf_path.read_text()
+    bytecode = compile(source, conf_path.as_posix(), "exec")
+    namespace = {
+        "__file__": conf_path.as_posix(),
+    }
+    exec(bytecode, namespace)
+    return namespace[func_name]()  # type: ignore
+
+
 def run_train(
     config
 ):
@@ -546,7 +597,7 @@ def run_train(
     )
     
     task_type = TaskType.CAUSAL_LM
-    target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"]
+    target_modules = config['lora_target_modules']
     lora_config = LoraConfig(
         task_type=task_type,
         inference_mode=False,
@@ -558,15 +609,18 @@ def run_train(
         quant_noise_config=model_args.quant_noise_config
     )
     
-    # Load pretrained model
-    model = AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        torch_dtype=torch.bfloat16,
-        token=model_args.token,
-        device_map = 'auto'
-    )
-    if config['use_lora']:
-        model = get_peft_model(model, lora_config)
+    # If limit on cuda memory is specified enforce the limit
+    if model_args.max_memory > 0:
+        mem_info = torch.cuda.mem_get_info()
+        print("Memory info: \n{}".format(mem_info))
+        # total_memory = mem_info[1] * 1e-9 # convert Bytes to GB
+        total_memory = torch.cuda.get_device_properties(0).total_memory  * 2**(-30) # convert Bytes to GB
+        if model_args.max_memory > total_memory:
+            raise ValueError("The specified memory limit {} is greater than the available memory {}.".format(model_args.max_memory, total_memory))
+        else:
+            fraction = model_args.max_memory / total_memory
+            torch.cuda.set_per_process_memory_fraction(fraction)
+            print("Restricting the memory to {} of the total memory to have a limit of {} ({} x {})".format(fraction, model_args.max_memory, fraction, total_memory))
 
     # Load pretrained tokenizer
     tokenizer_kwargs = {
@@ -581,11 +635,68 @@ def run_train(
         tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, **tokenizer_kwargs)
-    tokenizer.pad_token = tokenizer.eos_token
+
+    # Load pretrained model
+    model = AutoModelForCausalLM.from_pretrained(
+        model_args.model_name_or_path,
+        torch_dtype=torch.bfloat16,
+        token=model_args.token,
+        device_map = 'auto'
+    )
+    if config['use_lora']:
+        model = get_peft_model(model, lora_config)
 
 
     #Load and preprocessing dataset
-    data_module = make_data_module(tokenizer=tokenizer, args=data_args)
+
+    # no default pad token for llama!
+    # here we add all special tokens again, because the default ones are not in the special_tokens_map
+    if isinstance(tokenizer, LlamaTokenizer) or isinstance(tokenizer, LlamaTokenizerFast):
+        num_added_tokens = tokenizer.add_special_tokens({
+            "bos_token": "<s>",
+            "eos_token": "</s>",
+            "unk_token": "<unk>",
+            "pad_token": "<pad>",
+        })
+        assert num_added_tokens in [0, 1], "LlamaTokenizer should only add one special token - the pad_token, or no tokens if pad token present."
+
+    # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
+    # on a small vocab and want a smaller embedding size, remove this test.
+    embedding_size = model.get_input_embeddings().weight.shape[0]
+    if len(tokenizer) > embedding_size:
+        model.resize_token_embeddings(len(tokenizer))
+
+    print(len(tokenizer), embedding_size)
+
+    raw_datasets = load_hf_datasets(data_args)
+
+    # Preprocessing the datasets.
+    if "prompt" in raw_datasets["train"].column_names and "completion" in raw_datasets["train"].column_names:
+        encode_function = partial(
+            encode_with_prompt_completion_format,
+            tokenizer=tokenizer,
+            max_seq_length=data_args.max_seq_length,
+        )
+    elif "messages" in raw_datasets["train"].column_names:
+        encode_function = partial(
+            encode_with_messages_format,
+            tokenizer=tokenizer,
+            max_seq_length=data_args.max_seq_length,
+        )
+
+    lm_datasets = raw_datasets.map(
+        encode_function,
+        batched=False,
+        num_proc=data_args.preprocessing_num_workers,
+        remove_columns=[name for name in raw_datasets["train"].column_names if name not in ["input_ids", "labels", "attention_mask"]],
+        desc="Tokenizing and reformatting instruction data",
+    )
+
+    lm_datasets.set_format(type="pt")
+    lm_datasets = lm_datasets.filter(lambda example: (example['labels'] != -100).any())
+
+    train_dataset = lm_datasets["train"]
+    eval_dataset = lm_datasets["validation"]
 
     print("dataset prepared")
     # data_collator = DataCollatorWithMaskForCausalLM(
@@ -596,7 +707,7 @@ def run_train(
 
     if config['LinearQuantNoise']['replace_Linear']:
         if (config['LinearQuantNoise']['path_to_act_scales'] is not None) and \
-           (config['LinearQuantNoise']['fp_features_num'] is not None):
+            (config['LinearQuantNoise']['fp_features_num'] is not None):
             path_to_act_scales = config['LinearQuantNoise']['path_to_act_scales']
             fp_features_num = config['LinearQuantNoise']['fp_features_num']
             fp_inds_in_lin_layers = get_fp_inds_for_quik(path_to_act_scales, fp_features_num)
@@ -604,7 +715,7 @@ def run_train(
         assert config['LinearQuantNoise']['quant_target_modules'] is not None, 'quant_target_modules shoud be given!'
         modules_name_dict = {name: module for name, module in model.named_modules()}
         for name, module in modules_name_dict.items():
-            if isinstance(module, nn.Linear) and (name.find('lm_head') == -1):
+            if isinstance(module, nn.Linear) and (name.find('lm_head') == -1) and (name.find('layers.0') != -1):
                 ind = name.rfind(".")
                 if ind == -1:
                     father = modules_name_dict[""]
@@ -651,11 +762,14 @@ def run_train(
     print(f"trainable_params: {trainable_params}")
 
     # Initialize our Trainer
-    trainer = Seq2SeqTrainer(
+    trainer = Trainer(
         model=model,
-        tokenizer=tokenizer,
         args=training_args,
-        **{k:v for k,v in data_module.items() if k != 'predict_dataset'},
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        tokenizer=tokenizer,
+        # Data collator will default to DataCollatorWithPadding, so we change it.
+        data_collator=DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding="longest")
     )
 
     if config['resume_from_checkpoint'] is not None:
@@ -666,6 +780,7 @@ def run_train(
         train_result = trainer.train()
 
     trainer.save_model()  # Saves the tokenizer too for easy upload
+
 
 def read_config(conf_path, func_name: str):
     if isinstance(conf_path, str):

@@ -7,23 +7,33 @@ def model_configs():
 
     ### DATASET ###
     data = config.data = ml_collections.ConfigDict()
-    data.dataset = 'oasst1'
-    data.dataset_format = None
+    # data.dataset = 'oasst1'
+    # data.dataset_format = None
+    # data.dataset_name = "yahma/alpaca-cleaned"
+    data.dataset_name = "ostapeno/tulu_v2_flan_v2_subset"
+    data.dataset_config_name = None
     data.source_max_len = 16
     data.target_max_len = 512
+    data.dataset_percentage = 10
+    data.validation_split_percentage = 5
+    data.max_seq_length = 512
+    data.trust_remote_code = True
+    data.preprocessing_num_workers = 8
+
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = '/home/llm_compression/Quantization/Quik/weights/llama7b_3w_16a_128fp'
+    config.model_name_or_path = '/home/projects/LLaMA/huggingface/Llama-2-7b-hf'
     config.model_config_name = None
     config.tokenizer_name = None
     config.token = None
     config.use_fast_tokenizer = True
     config.trust_remote_code = True
+    config.max_memory = 21
 
     ### SAVING DIRS ###
     # config.cache_dir = None
-    config.output_dir = './exp_results/red_pajama/llama_quant3bit_outliers_instruct'
+    config.output_dir = './exp_results/output/llama7b_test'
 
     ### TRAINING ###
     config.run_name = 'linearquant_3bit'
@@ -66,7 +76,8 @@ def model_configs():
     ### LinearQuantNoise
     config.LinearQuantNoise = {
         'replace_Linear': True,
-        'path_to_act_scales': "/home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt", 
+        # 'path_to_act_scales': "/home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt",
+        'path_to_act_scales': "/home/projects/Quantization/QUIK/experiments/act_scales/Llama-2-7b-hf.pt",
         'fp_features_num': 128,
         'quant_target_modules': ["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"],
         'quant_bit': 3,
