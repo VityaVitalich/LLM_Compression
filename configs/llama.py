@@ -21,23 +21,23 @@ def model_configs():
     config.token = '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'
 
     ### SAVING DIRS ###
-    config.cache_dir = '/home/data/taxonomy/hf_cache/'
-    config.output_dir = '/home/LLM_Compression/logs/fine_tuning/full/test/'
+    config.cache_dir = '/home/cache/hf_cache/'
+    config.output_dir = '/home/LLM_Compression/logs/fine_tuning/full/clip_2e-2_zero/'
     
     ### TRAINING ###
     config.learning_rate = 3e-5
     config.weight_decay = 1e-3
     config.seed = 57
     config.num_train_epochs = 1
-    config.per_device_train_batch_size = 1
-    config.per_device_eval_batch_size = 1
+    config.per_device_train_batch_size = 8
+    config.per_device_eval_batch_size = 8
     config.gradient_accumulation_steps = 2
     config.gradient_checkpointing = False
     config.report_to = 'wandb'
-    config.run_name = 'test_STE'
+    config.run_name = 'clip_zero_full_red-pajama'
     ### eval ###
     config.evaluation_strategy = 'steps'
-    config.eval_steps = 100
+    config.eval_steps = 250
     ### save ###
     config.save_strategy = 'steps'
     config.save_steps = 100
@@ -60,7 +60,7 @@ def model_configs():
 
 
     ### ZERO OUTLIERS ###
-    config.zero_outliers = False
+    config.zero_outliers = True
     config.outlier_fraction = 0.05
 
     ### STE ###

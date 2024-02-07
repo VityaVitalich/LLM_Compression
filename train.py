@@ -2,6 +2,7 @@ from typing import Optional, Dict, Sequence
 from argparse import ArgumentParser
 from pathlib import Path
 
+from tqdm import tqdm
 from dataclasses import dataclass, field
 from itertools import chain
 
@@ -275,7 +276,7 @@ class DataCollatorWithMaskForCausalLM(object):
 @torch.no_grad()   
 def create_mask(weight, outlier_fraction):
 
-    w = torch.clone(weight).float()
+    w = torch.clone(weight).float() 
     w_flat = w.view(-1) 
     lower_threshold, upper_threshold = ( 
         torch.kthvalue( 
@@ -319,8 +320,8 @@ def run_train(
         torch_dtype=torch.bfloat16,
         token=model_args.token,
         cache_dir=model_args.cache_dir,
-        device_map='auto'
-    )
+        device_map="auto"	    
+)
     
     if config.zero_outliers:
         make_zero_outliers(model, config.outlier_fraction)
