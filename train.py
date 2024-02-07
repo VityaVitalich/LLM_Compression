@@ -7,10 +7,10 @@ from itertools import chain
 
 import numpy as np
 import torch
-
+from tqdm import tqdm
 from peft import PeftModel, get_peft_model, TaskType, LoraConfig
 
-
+from ste_utils import prepare_llama_ste
 import datasets
 from datasets import load_dataset
 
@@ -275,7 +275,7 @@ class DataCollatorWithMaskForCausalLM(object):
 @torch.no_grad()   
 def create_mask(weight, outlier_fraction):
 
-    w = torch.clone(weight) 
+    w = torch.clone(weight).float()
     w_flat = w.view(-1) 
     lower_threshold, upper_threshold = ( 
         torch.kthvalue( 
@@ -313,11 +313,13 @@ def run_train(
     # else:
     #     model_type = AutoModelForCausalLM
     
+
     model = AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         torch_dtype=torch.bfloat16,
         token=model_args.token,
-        cache_dir=model_args.cache_dir
+        cache_dir=model_args.cache_dir,
+        device_map='auto'
     )
     
     if config.zero_outliers:
@@ -325,6 +327,10 @@ def run_train(
 
     if config.use_clip_softmax:
         model.set_clipped_sm(gamma=config.clip_softmax_gamma, eta=config.clip_softmax_eta)
+
+    if config.ste.enable:
+        outlier_ids, layer_bit = prepare_llama_ste(config.ste.path_to_act_scales, config.ste.fp_features_num, **config.ste.layer_bits)
+        model.enable_ste(outlier_ids=outlier_ids, layer_bit=layer_bit, block_size=config.ste.block_size)
 
     if config.use_lora:
         task_type = TaskType.CAUSAL_LM
@@ -419,10 +425,10 @@ def read_config(conf_path, func_name: str):
 def main():
     parser = ArgumentParser()
     parser.add_argument("--config_path", help="path_to_conifg", required=True)
-    parser.add_argument("--local-rank", type=int)
+    parser.add_argument("--local-rank", type=int, default=-1)
     args = parser.parse_args()
     config = read_config(args.config_path, 'model_configs')
-    torch.cuda.set_device(args.local_rank)
+  #  torch.cuda.set_device(args.local_rank)
 
     data_args = DataTrainingArguments(
         dataset_name = config.data.dataset_name,

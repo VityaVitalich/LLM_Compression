@@ -21,6 +21,7 @@
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
+from operator import attrgetter
 
 import torch
 import torch.nn.functional as F
@@ -128,6 +129,89 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None, dropout_p=0.
     #attn_weight = torch.softmax(attn_weight, dim=-1)
     attn_weight = torch.dropout(attn_weight, dropout_p, train=True)
     return attn_weight @ value
+
+
+def round_pass(x):
+    y = x.round()
+    y_grad = x
+    return (y - y_grad).detach() + y_grad
+
+def quantize(
+    X: torch.Tensor = None,
+    B: int = 16,
+    ) -> torch.Tensor:
+
+    thd_neg = -(2 ** (B - 1)) + 1
+    thd_pos = 2 ** (B - 1) - 1
+
+
+    scale = (X.max() - X.min())/(thd_neg - thd_pos)
+    X = round_pass(X/scale)
+    X = torch.clip(X, thd_neg, thd_pos)
+    return scale*X
+
+@torch.jit.script
+def quantize_over_blocks(
+    X: torch.Tensor,
+    B: int = 16,
+    block_size: int = 4,  # Assuming block size along the first dimension
+) -> torch.Tensor:
+    # Dimensions for the input tensor
+    D = X.shape[0]
+
+    # Quantization thresholds
+    thd_neg = -(2 ** (B - 1)) + 1
+    thd_pos = 2 ** (B - 1) - 1
+    # Initialize an output tensor
+    X_quantized = torch.zeros_like(X)
+    
+    # Calculate number of blocks
+    num_blocks = (D + block_size - 1) // block_size  # Account for the last block that might be smaller
+    
+    for i in range(num_blocks):
+        # Extract the block
+        start_idx = i * block_size
+        end_idx = min((i + 1) * block_size, D)
+        block = X[start_idx:end_idx]
+        
+        # Scale for the current block
+        scale = (block.max() - block.min()) / (thd_pos - thd_neg)
+        block = round_pass(block / scale)
+        block = torch.clip(block, thd_neg, thd_pos)
+        
+        # Store the quantized block back into the tensor
+        X_quantized[start_idx:end_idx] = scale * block
+    
+    return X_quantized
+
+def quantize_with_outliers(X: torch.Tensor,
+    B: int = 16,
+    block_size: int = 4,
+    idx: torch.Tensor = torch.tensor([])):
+
+    if len(idx) == 0:
+        print('Empty outlier idx')
+        return quantize_over_blocks(X, B=B, block_size=block_size)
+    
+    mask = torch.ones(X.size(1), dtype=torch.bool)
+    mask[idx] = False
+
+    # Split the tensor into quantize and no_quantize parts
+    X_quantize = X[:, mask]
+    X_no_quantize = X[:, ~mask]
+
+    # Quantize the part that needs quantization
+    X_quantized = quantize_over_blocks(X_quantize, B=4, block_size=16)
+
+    # # Prepare a tensor to hold the result
+    # X_result = torch.empty_like(X)
+
+    # Place the quantized and unquantized parts back in their original positions
+    X[:, mask] = X_quantized
+    X[:, ~mask] = X_no_quantize
+
+    return X
+
 
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -798,6 +882,12 @@ class LlamaDecoderLayer(nn.Module):
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        self.STE = config.STE
+        if self.STE:
+            self.layer_bit = config.layer_bit[layer_idx]
+            self.outlier_ids = config.outlier_ids[layer_idx]
+            self.block_size = config.block_size
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -826,6 +916,9 @@ class LlamaDecoderLayer(nn.Module):
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
             )
+
+        if self.STE and self.training:
+            self.quantize()
 
         residual = hidden_states
 
@@ -858,6 +951,11 @@ class LlamaDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
+
+    def quantize(self):
+        for layer_name in self.outlier_ids.keys():
+            cur_layer = attrgetter(layer_name)(self)
+            cur_layer.weight.data = quantize_with_outliers(cur_layer.weight.data, B=self.layer_bit[layer_name], block_size=self.block_size, idx=self.outlier_ids[layer_name])
 
 
 LLAMA_START_DOCSTRING = r"""
@@ -995,6 +1093,18 @@ class LlamaModel(LlamaPreTrainedModel):
 
         if not getattr(config, 'clip_softmax_eta', None):
             config.clip_softmax_eta = 1
+
+        if not getattr(config, 'layer_bit', None):
+            config.layer_bit = {}
+        
+        if not getattr(config, 'outlier_ids', None):
+            config.outlier_ids = {}
+
+        if not getattr(config, 'STE', None):
+            config.STE = False
+
+        if not getattr(config, 'block_size', None):
+            config.block_size = 64
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
@@ -1165,6 +1275,19 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             layer.self_attn.clip_softmax_gamma = gamma
         self.model.config.clip_softmax_gamma = gamma
         self.model.config.clip_softmax_eta = eta
+
+    def enable_ste(self, outlier_ids, layer_bit, block_size=64):
+        self.model.config.outlier_ids = outlier_ids
+        self.model.config.layer_bit = layer_bit
+        self.model.config.STE = True
+        self.model.config.block_size = block_size
+
+        for layer_idx in range(self.model.config.num_hidden_layers):
+            self.model.layers[layer_idx].layer_bit = layer_bit[layer_idx]
+            self.model.layers[layer_idx].outlier_ids = outlier_ids[layer_idx]
+            self.model.layers[layer_idx].STE = True
+            self.model.layers[layer_idx].block_size = block_size
+
     def get_input_embeddings(self):
         return self.model.embed_tokens
 

@@ -7,11 +7,11 @@ def model_configs():
 
     ### DATASET ###
     data = config.data = ml_collections.ConfigDict()
-    data.dataset_name = 'togethercomputer/RedPajama-Data-1T-Sample'
-    data.dataset_config_name = None
+    data.dataset_name = 'wikitext'
+    data.dataset_config_name = 'wikitext-2-raw-v1'
     data.valid_split = 5
-    data.block_size = 128
-    data.dataset_percentage = 1
+    data.block_size = 3
+    data.dataset_percentage = 5
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
@@ -21,30 +21,30 @@ def model_configs():
     config.token = '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'
 
     ### SAVING DIRS ###
-    config.cache_dir = '/home/cache/hf_cache/'
-    config.output_dir = '/home/LLM_Compression/logs/fine_tuning/full/clip_2e-2/'
+    config.cache_dir = '/home/data/taxonomy/hf_cache/'
+    config.output_dir = '/home/LLM_Compression/logs/fine_tuning/full/test/'
     
     ### TRAINING ###
     config.learning_rate = 3e-5
     config.weight_decay = 1e-3
     config.seed = 57
     config.num_train_epochs = 1
-    config.per_device_train_batch_size = 2
-    config.per_device_eval_batch_size = 2
-    config.gradient_accumulation_steps = 4
+    config.per_device_train_batch_size = 1
+    config.per_device_eval_batch_size = 1
+    config.gradient_accumulation_steps = 2
     config.gradient_checkpointing = False
     config.report_to = 'wandb'
-    config.run_name = 'no_clip_full_red-pajama'
+    config.run_name = 'test_STE'
     ### eval ###
     config.evaluation_strategy = 'steps'
-    config.eval_steps = 500
+    config.eval_steps = 100
     ### save ###
     config.save_strategy = 'steps'
-    config.save_steps = 1000
+    config.save_steps = 100
 
 
     ### SOFTMAX CLIP ###
-    config.use_clip_softmax = True
+    config.use_clip_softmax = False
     config.clip_softmax_eta = 1
     config.clip_softmax_gamma = -12/512
 
@@ -62,4 +62,12 @@ def model_configs():
     ### ZERO OUTLIERS ###
     config.zero_outliers = False
     config.outlier_fraction = 0.05
+
+    ### STE ###
+    ste = config.ste = ml_collections.ConfigDict()
+    ste.enable = True
+    ste.path_to_act_scales = '/home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt'
+    ste.fp_features_num = 128
+    ste.layer_bits = {'q': 2, 'k': 4, 'v': 4, 'o': 4, 'down': 4, 'gate': 4, 'up': 4}
+    ste.block_size = 64
     return config
