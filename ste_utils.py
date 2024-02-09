@@ -29,9 +29,9 @@ def get_fp_llama(path_to_act_scales, fp_features_num):
         layer_number, rest_of_string = extract_pattern(k)
         
         if int(layer_number) not in outlier_ids.keys():
-            outlier_ids[int(layer_number)] = {rest_of_string: v}
+            outlier_ids[int(layer_number)] = {rest_of_string: v.tolist()}
         else:
-            outlier_ids[int(layer_number)][rest_of_string] = v
+            outlier_ids[int(layer_number)][rest_of_string] = v.tolist()
 
     return outlier_ids
 

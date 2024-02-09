@@ -157,7 +157,7 @@ def quantize_over_blocks(
     block_size: int = 4,  # Assuming block size along the first dimension
 ) -> torch.Tensor:
     # Dimensions for the input tensor
-    D = X.shape[0]
+    D = X.shape[1]
 
     # Quantization thresholds
     thd_neg = -(2 ** (B - 1)) + 1
@@ -172,7 +172,7 @@ def quantize_over_blocks(
         # Extract the block
         start_idx = i * block_size
         end_idx = min((i + 1) * block_size, D)
-        block = X[start_idx:end_idx]
+        block = X[:,start_idx:end_idx]
         
         # Scale for the current block
         scale = (block.max() - block.min()) / (thd_pos - thd_neg)
@@ -180,7 +180,7 @@ def quantize_over_blocks(
         block = torch.clip(block, thd_neg, thd_pos)
         
         # Store the quantized block back into the tensor
-        X_quantized[start_idx:end_idx] = scale * block
+        X_quantized[:,start_idx:end_idx] = scale * block
     
     return X_quantized
 
@@ -201,7 +201,7 @@ def quantize_with_outliers(X: torch.Tensor,
     X_no_quantize = X[:, ~mask]
 
     # Quantize the part that needs quantization
-    X_quantized = quantize_over_blocks(X_quantize, B=4, block_size=16)
+    X_quantized = quantize_over_blocks(X_quantize, B=B, block_size=block_size)
 
     # # Prepare a tensor to hold the result
     # X_result = torch.empty_like(X)

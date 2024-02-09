@@ -406,6 +406,7 @@ def run_train(
         data_collator=default_data_collator
     )
 
+    trainer.save_model()
     train_result = trainer.train()
     trainer.save_model()  # Saves the tokenizer too for easy upload
 
