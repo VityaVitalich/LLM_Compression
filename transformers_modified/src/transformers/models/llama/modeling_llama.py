@@ -136,6 +136,13 @@ def round_pass(x):
     y_grad = x
     return (y - y_grad).detach() + y_grad
 
+
+def grad_scale(x, scale):
+    y = x
+    y_grad = x * scale
+    return (y - y_grad).detach() + y_grad
+
+
 def quantize(
     X: torch.Tensor = None,
     B: int = 16,
@@ -211,6 +218,85 @@ def quantize_with_outliers(X: torch.Tensor,
     X[:, ~mask] = X_no_quantize
 
     return X
+
+
+class LsqQuan(nn.Module):
+    def __init__(
+        self, bit, all_positive=False, symmetric=False, per_channel=True, outlier_ids=[]
+    ):
+        super(LsqQuan, self).__init__()
+        self.bit = bit
+        self.outlier_ids = outlier_ids
+
+
+        if all_positive:
+            assert not symmetric, "Positive quantization cannot be symmetric"
+            # unsigned activation is quantized to [0, 2^b-1]
+            self.thd_neg = 0
+            self.thd_pos = 2**bit - 1
+        else:
+            if symmetric:
+                # signed weight/activation is quantized to [-2^(b-1)+1, 2^(b-1)-1]
+                self.thd_neg = -(2 ** (bit - 1)) + 1
+                self.thd_pos = 2 ** (bit - 1) - 1
+            else:
+                # signed weight/activation is quantized to [-2^(b-1), 2^(b-1)-1]
+                self.thd_neg = -(2 ** (bit - 1))
+                self.thd_pos = 2 ** (bit - 1) - 1
+
+        self.per_channel = per_channel
+        self.s = nn.Parameter(torch.ones(1))
+
+    def init_from(self, x, *args, **kwargs):
+        self.mask = torch.ones(x.size(1), dtype=torch.bool)
+        self.mask[self.outlier_ids] = False
+        x_quantize = x[:, self.mask]
+
+        self.s = nn.Parameter(
+                x_quantize.detach().abs().mean(dim=0) * 2 / (self.thd_pos**0.5)
+        )
+
+    def forward(self, x):
+        if self.bit >= 32:
+            return x
+
+
+        x_result = torch.empty_like(x)        
+        x_quantize = x[:, self.mask]
+
+        s_grad_scale = 1.0 / ((self.thd_pos * x.numel()) ** 0.5)
+        
+        device = x_quantize.device
+        s_scale = grad_scale(self.s, s_grad_scale).to(device)
+        x_quantize = x_quantize / (s_scale)
+        x_quantize = torch.clamp(x_quantize, self.thd_neg, self.thd_pos)
+        x_quantize = round_pass(x_quantize)
+        x_quantize = x_quantize * (s_scale)
+
+        #assert (x_quantize == x[:, self.mask]).all()
+        x_result[:, self.mask] = x_quantize
+        x_result[:, ~self.mask] = x[:, ~self.mask]
+        return x_result
+
+class QuatizedLinear(nn.Linear):
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        if self.training:
+            
+            quantized_weight = self.quantizer(self.weight)
+            self.weight.data = quantized_weight
+            return F.linear(input, quantized_weight, self.bias)
+        else:
+            return F.linear(input, self.weight, self.bias)
+
+    def __init__(self, linear, learnable_scales=False, bit=4, outlier_ids=[0]):
+        super().__init__(in_features=linear.in_features,
+                         out_features=linear.out_features,
+                        bias=(linear.bias is not None), device=linear.weight.device, dtype=linear.weight.dtype)
+        self.load_state_dict(linear.state_dict())
+
+        self.quantizer = LsqQuan(bit=bit, symmetric=True, outlier_ids=outlier_ids)
+        self.quantizer.init_from(self.weight)
 
 
 class LlamaRMSNorm(nn.Module):
@@ -887,6 +973,7 @@ class LlamaDecoderLayer(nn.Module):
             self.layer_bit = config.layer_bit[layer_idx]
             self.outlier_ids = config.outlier_ids[layer_idx]
             self.block_size = config.block_size
+            self.learnable_scales = config.learnable_scales
 
     def forward(
         self,
@@ -917,7 +1004,7 @@ class LlamaDecoderLayer(nn.Module):
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
             )
 
-        if self.STE and self.training:
+        if self.STE and self.training and (not self.learnable_scales):
             self.quantize()
 
         residual = hidden_states
@@ -957,6 +1044,24 @@ class LlamaDecoderLayer(nn.Module):
             cur_layer = attrgetter(layer_name)(self)
             cur_layer.weight.data = quantize_with_outliers(cur_layer.weight.data, B=self.layer_bit[layer_name], block_size=self.block_size, idx=self.outlier_ids[layer_name])
 
+
+    def set_learnable_scales(self): 
+        self.learnable_scales = True
+
+        layers = ['mlp', 'self_attn']
+        projectors = {
+            'self_attn': ['q_proj', 'k_proj', 'v_proj', 'o_proj'],
+            'mlp': ['up_proj', 'down_proj', 'gate_proj']
+        }
+        for layer_name in layers:
+            cur_layer = getattr(self, layer_name)
+            for proj_name in projectors[layer_name]:
+                cur_projection = getattr(cur_layer, proj_name)
+
+                cur_bit = self.layer_bit[f'{layer_name}.{proj_name}']
+                outlier_ids = self.outlier_ids[f'{layer_name}.{proj_name}']
+                quantized_projection = QuatizedLinear(cur_projection, learnable_scales=True, bit=cur_bit, outlier_ids=outlier_ids)
+                setattr(cur_layer, proj_name, quantized_projection)
 
 LLAMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -1105,6 +1210,9 @@ class LlamaModel(LlamaPreTrainedModel):
 
         if not getattr(config, 'block_size', None):
             config.block_size = 64
+
+        if not getattr(config, 'learnable_scales', None):
+            config.learnable_scales = False
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
@@ -1276,17 +1384,21 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.model.config.clip_softmax_gamma = gamma
         self.model.config.clip_softmax_eta = eta
 
-    def enable_ste(self, outlier_ids, layer_bit, block_size=64):
+    def enable_ste(self, outlier_ids, layer_bit, block_size=64, learnable_scales=False):
         self.model.config.outlier_ids = outlier_ids
         self.model.config.layer_bit = layer_bit
         self.model.config.STE = True
         self.model.config.block_size = block_size
+        self.model.config.learnable_scales = learnable_scales
 
         for layer_idx in range(self.model.config.num_hidden_layers):
             self.model.layers[layer_idx].layer_bit = layer_bit[layer_idx]
             self.model.layers[layer_idx].outlier_ids = outlier_ids[layer_idx]
             self.model.layers[layer_idx].STE = True
             self.model.layers[layer_idx].block_size = block_size
+            if learnable_scales:
+                self.model.layers[layer_idx].set_learnable_scales()
+
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
