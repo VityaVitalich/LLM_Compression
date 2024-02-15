@@ -970,8 +970,14 @@ class LlamaDecoderLayer(nn.Module):
 
         self.STE = config.STE
         if self.STE:
-            self.layer_bit = config.layer_bit[layer_idx]
-            self.outlier_ids = config.outlier_ids[layer_idx]
+            try:
+                self.layer_bit = config.layer_bit[layer_idx]
+            except KeyError:
+                self.layer_bit = config.layer_bit[str(layer_idx)]
+            try:
+                self.outlier_ids = config.outlier_ids[layer_idx]
+            except KeyError:
+                self.outlier_ids = config.outlier_ids[str(layer_idx)]
             self.block_size = config.block_size
             self.learnable_scales = config.learnable_scales
 
