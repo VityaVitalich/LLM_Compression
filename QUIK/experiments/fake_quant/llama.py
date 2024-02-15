@@ -49,7 +49,7 @@ def llama_parser():
     parser.add_argument('--a_bits', type=int, default=16, choices=[4, 8, 16])
 
     # Weight Quantization Params: 
-    parser.add_argument('--w_bits', type=int, default=16, choices=[2, 4, 8, 16])
+    parser.add_argument('--w_bits', type=int, default=16, choices=[2, 3, 4, 8, 16])
     parser.add_argument('--w_clip', action='store_true', help='Use clipping for weight quantization')
     parser.add_argument('--w_asym', action='store_true')
     
@@ -361,8 +361,9 @@ if __name__ == '__main__':
             wandb.log({'zero_outlier_linear': number_of_zero_outlier_linear})
         print(f'{number_of_zero_outlier_linear} layers with zero outliers.\n')
 
-    save_path = f"/home/data/compression/quik_cache/llama7b_{args.w_bits}w_{args.a_bits}a_{args.fp_features}fp_true.pt"
-    torch.save(model, save_path)
+    save_path = f"/home/projects/LLM_comression/QUIK/weights/llama7b_{args.w_bits}w_{args.a_bits}a_{args.fp_features}fp"
+    # torch.save(model, save_path)
+    model.save_pretrained(save_path)
     datasets = ['wikitext2']
     for dataset in datasets:
         dataloader, testloader = datautils.get_loaders(

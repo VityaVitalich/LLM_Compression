@@ -1,4 +1,6 @@
 from typing import Optional, Dict, Sequence
+from argparse import ArgumentParser
+from pathlib import Path
 
 from dataclasses import dataclass, field
 from itertools import chain
@@ -15,7 +17,8 @@ from transformers import (
     AutoModelForCausalLM,
     Trainer,
     TrainingArguments,
-    default_data_collator
+    default_data_collator,
+    DataCollatorForLanguageModeling
 )
 
 from peft import PeftModel, get_peft_model, TaskType, LoraConfig
@@ -82,10 +85,6 @@ class ModelArguments:
             "choices": ["auto", "bfloat16", "float16", "float32"],
         },
     )
-    lora_init: bool = field(
-        default=False,
-        metadata={"help": "True: Use zero and gaussian initialization; False: Load adapters from LoftQ in HF hub."},
-    )
     rank: int = field(
         default=64,
         metadata={"help": "Rank of LoRA adapters. LoftQ does not require this config. Used for fp16 LoRA or QLoRA."},
@@ -93,6 +92,10 @@ class ModelArguments:
     lora_alpha: int = field(
         default=16,
         metadata={"help": "LoftQ does not require this config. Used for QLoRA."},
+    )
+    quant_noise_config: dict = field(
+        default=None,
+        metadata={"help": "Parameters to add noise"},
     )
 
 @dataclass
@@ -107,6 +110,16 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom dataset defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
     streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
     block_size: Optional[int] = field(
         default=None,
@@ -120,6 +133,12 @@ class DataTrainingArguments:
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
+    dataset_percentage: Optional[int] = field(
+        default=100,
+        metadata={
+            "help": "The percentage of the dataset used for computation"
+        },  
     )
     validation_split_percentage: Optional[int] = field(
         default=5,
@@ -142,21 +161,32 @@ def load_hf_datasets(
             data_args.dataset_name,
             data_args.dataset_config_name,
             streaming=data_args.streaming,
+            trust_remote_code=data_args.trust_remote_code
         )
+
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 streaming=data_args.streaming,
+                trust_remote_code=data_args.trust_remote_code
             )
             raw_datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 streaming=data_args.streaming,
+                trust_remote_code=data_args.trust_remote_code
             )
         
+        if data_args.dataset_percentage < 100:
+            dataset_frac = data_args.dataset_percentage/100
+            dataset_parts = raw_datasets['train'].train_test_split(train_size=dataset_frac)
+            raw_datasets['train'] = dataset_parts['train']
+            dataset_parts = raw_datasets['validation'].train_test_split(test_size=dataset_frac)
+            raw_datasets['validation'] = dataset_parts['test']
+
         return raw_datasets
 
 def tokenize_datasets(
@@ -263,13 +293,13 @@ class DataCollatorWithMaskForCausalLM(object):
         if labels is not None:
             data_dict['labels'] = labels
         return data_dict
-
+    
 def run_train(
-    data_args,
     model_args,
+    data_args,
     training_args
 ):
-
+    
     task_type = TaskType.CAUSAL_LM
     target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"]
     lora_config = LoraConfig(
@@ -280,8 +310,9 @@ def run_train(
         lora_dropout=0.1,
         target_modules=target_modules,
         init_lora_weights=True,
+        quant_noise_config=model_args.quant_noise_config
     )
-
+    
     # Load pretrained model
     model = AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
@@ -304,7 +335,10 @@ def run_train(
         tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, **tokenizer_kwargs)
+    tokenizer.pad_token = tokenizer.eos_token
 
+
+    #Load and preprocessing dataset
     raw_datasets = load_hf_datasets(data_args)
     tokenized_datasets = tokenize_datasets(data_args, raw_datasets, tokenizer)
     lm_datasets = format_datasets(data_args, tokenized_datasets, tokenizer)
@@ -322,6 +356,7 @@ def run_train(
 
     print(f"trainable_params: {trainable_params}")
 
+    #Train
     train_dataset = lm_datasets["train"]
     eval_dataset = lm_datasets["validation"]
 
@@ -333,62 +368,83 @@ def run_train(
         eval_dataset=eval_dataset,
         tokenizer=tokenizer,
         # Data collator will default to DataCollatorWithPadding, so we change it.
-        data_collator=default_data_collator
-        # data_collator=data_collator
+        data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False)
     )
 
-    checkpoint = None
-    if training_args.resume_from_checkpoint is not None:
-        checkpoint = training_args.resume_from_checkpoint
+    train_result = trainer.train()
+    trainer.save_model()  # Saves the tokenizer too for easy upload
 
-    train_result = trainer.train(resume_from_checkpoint=checkpoint)
+def read_config(conf_path, func_name: str):
+    if isinstance(conf_path, str):
+        conf_path = Path(conf_path)
+
+    source = conf_path.read_text()
+    bytecode = compile(source, conf_path.as_posix(), "exec")
+    namespace = {
+        "__file__": conf_path.as_posix(),
+    }
+    exec(bytecode, namespace)
+    return namespace[func_name]()  # type: ignore
 
 def main():
+    parser = ArgumentParser()
+    parser.add_argument("--config_path", help="path_to_conifg", required=True)
+
+    args = parser.parse_args()
+    config = read_config(args.config_path, 'model_configs')
 
     data_args = DataTrainingArguments(
-        dataset_name = "wikitext",
-        dataset_config_name = "wikitext-2-raw-v1",
-        validation_split_percentage = 5,
-        block_size = 128
+        dataset_name = config.data.dataset_name,
+        dataset_config_name = config.data.dataset_config_name,
+        validation_split_percentage = config.data.validation_split_percentage,
+        block_size = config.data.block_size,
+        dataset_percentage = config.data.dataset_percentage,
+        trust_remote_code = config.data.trust_remote_code,
+        preprocessing_num_workers = config.data.preprocessing_num_workers
     )
 
     model_args = ModelArguments(
-        model_name_or_path = "/home/projects/Quantization/SpQR/weights/LLaMA7B_quant_threshold_063",
-        config_name = "/home/projects/Quantization/SpQR/weights/LLaMA7B_quant_threshold_063/config.json",
-        tokenizer_name = "/home/projects/Quantization/SpQR/weights/LLaMA7B_quant_threshold_063",
-        use_fast_tokenizer = True,
-        token = None,
-        trust_remote_code = True,
-        lora_init = True,
-        rank = 64,
-        lora_alpha = 16
+        model_name_or_path = config.model_name_or_path, #"/home/projects/LLaMA/huggingface/Llama-2-7b-hf",
+        config_name = config.model_config_name, #"/home/projects/LLaMA/huggingface/Llama-2-7b-hf/config.json",
+        tokenizer_name = config.tokenizer_name, #"/home/projects/LLaMA/huggingface/Llama-2-7b-hf",
+        use_fast_tokenizer = config.use_fast_tokenizer,
+        token = config.token, #None,
+        trust_remote_code = config.trust_remote_code,
+        cache_dir= config.cache_dir,
+        rank = config.lora_rank,
+        lora_alpha = config.lora_alpha,
+        quant_noise_config = config.quant_noise_config
     )
 
     training_args = TrainingArguments(
-        output_dir = "./exp_results/wikitext-2/test",
-        # resume_from_checkpoint = "./home/projects/Quantization/SpQR/weights/LLaMA7B_quant_063_lora/checkpoint-348",
+        run_name=config.run_name,
+        output_dir = config.output_dir,
+        resume_from_checkpoint = config.resume_from_checkpoint,
         overwrite_output_dir = True,
-        learning_rate = 3e-4,
-        seed = 11,
-        num_train_epochs = 3,
-        per_device_train_batch_size = 4,
-        per_device_eval_batch_size = 4,
-        gradient_accumulation_steps = 16,
-        gradient_checkpointing=False,
-        save_strategy = "epoch",
-        weight_decay = 0.1,
-        warmup_ratio = 0.03,
-        lr_scheduler_type = "cosine",
+        learning_rate = config.learning_rate, 
+        seed = config.seed, 
+        max_steps = config.max_steps,
+        num_train_epochs = config.num_train_epochs, #3,
+        weight_decay = config.weight_decay, #0.1,
+        warmup_ratio = config.warmup_ratio,
+        lr_scheduler_type = config.lr_scheduler_type,
+        per_device_train_batch_size = config.per_device_train_batch_size, #2,
+        per_device_eval_batch_size = config.per_device_eval_batch_size, #2,
+        gradient_accumulation_steps = config.gradient_accumulation_steps, #16,
+        gradient_checkpointing=config.gradient_checkpointing, #False,
+        save_strategy = config.save_strategy,
+        save_steps = config.save_steps,
+        evaluation_strategy = config.evaluation_strategy,
+        eval_steps = config.eval_steps,
         logging_steps = 1,
         do_train = True,
         do_eval = True,
-        # report_to = "tensorboard"
-        report_to = None
+        report_to = config.report_to
     )
 
     run_train(
-        data_args,
         model_args,
+        data_args,
         training_args
     )
 
