@@ -451,7 +451,7 @@ class QuantizedLinear(nn.Linear):
 
     def set_mask(self, outlier_ids) -> None:
         with torch.no_grad():
-            self.mask = torch.ones(self.weight.size(1), dtype=torch.bool, device=self.weight.device)
+            self.mask = torch.ones(self.weight.size(1), dtype=torch.bool)
             self.mask[outlier_ids] = False
 
     def add_quant_noise_to_weight(
@@ -512,10 +512,12 @@ class QuantizedLinear(nn.Linear):
             return F.linear(input, w, self.bias)
 
         else:
+            w = self.weight
+
             if self.add_quant_noise_predict:
                 w = self.quantizer(w)
-                
-                return F.linear(input, self.weight, self.bias)
+            
+            return F.linear(input, w, self.bias)
 
 
 class LlamaRMSNorm(nn.Module):
@@ -1207,11 +1209,11 @@ class LlamaDecoderLayer(nn.Module):
             'fp_cols_num': config.weight_quant_noise['fp_cols_num']
         }
 
-        # if self.QuantizedLinear_decoder['replace']:
-        #     self.replace_Linear()
+        if self.QuantizedLinear_decoder['replace']:
+            self.replace_Linear()
         
-        # if self.weight_quant_noise_decoder['add']:
-        #     self.add_quant_noise_to_weight()
+        if self.weight_quant_noise_decoder['add']:
+            self.add_quant_noise_to_weight()
 
         # self.add_quant_noise = config.add_quant_noise
         # self.add_quant_noise_predict = config.add_quant_noise_predict
