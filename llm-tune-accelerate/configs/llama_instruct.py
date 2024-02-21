@@ -51,7 +51,7 @@ def model_configs():
     config.per_device_eval_batch_size = 1
     config.gradient_accumulation_steps = 64
     config.gradient_checkpointing = False
-    config.report_to = None
+    config.report_to = "wandb"
     ### eval ###
     # config.evaluation_strategy = 'steps'
     # config.eval_steps = 100
