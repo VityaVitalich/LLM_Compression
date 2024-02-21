@@ -89,10 +89,10 @@ def model_configs():
 
     ### NoiseQuant
     config.NoiseQuant = {
-        'add_quant_noise': True,
-        'predict': True,
+        'add_quant_noise': False,
+        'predict': False,
         'block_size': 128,
-        'compute_scale': True,
+        'compute_scale': False,
         'layer_bits': {'q': 4, 'k': 4, 'v': 4, 'o': 4, 'down': 4, 'gate': 4, 'up': 4}
     }
 
