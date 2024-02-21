@@ -9,9 +9,9 @@
 #SBATCH --mail-user=V.Moskvoretskii@skoltech.ru
 
 #SBATCH --output=zh_logs/eval_lm.txt
-#SBATCH --time=0-03
+#SBATCH --time=0-01
 
-#SBATCH --mem=100G
+#SBATCH --mem=16G
 
 #SBATCH --nodes=1
 

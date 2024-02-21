@@ -159,6 +159,7 @@ def round_pass(x):
     y = x.round()
     y_grad = x
     return (y - y_grad).detach() + y_grad
+   # return x
 
 
 def grad_scale(x, scale):
@@ -279,29 +280,36 @@ class LsqQuan(nn.Module):
         x_quantize = x[:, self.mask]
 
         self.s = nn.Parameter(
-            x_quantize.detach().abs().mean(dim=0) * 2 / (self.thd_pos**0.5)
+            x.detach().abs().mean(dim=0) * 2 / (self.thd_pos**0.5)
         )
 
     def forward(self, x):
         if self.bit >= 32:
             return x
-
-        x_result = torch.empty_like(x)
-        x_quantize = x[:, self.mask]
+        
+        assert not torch.isnan(x).any(), "before quant" 
+        x_quantize = x
+        x_outlier = x[:,~self.mask].clone()
 
         s_grad_scale = 1.0 / ((self.thd_pos * x.numel()) ** 0.5)
 
         device = x_quantize.device
         s_scale = grad_scale(self.s, s_grad_scale).to(device)
+        s_scale += 1e-12
+ 
+        assert not torch.isnan(x_quantize).any(), "before frac scale"
         x_quantize = x_quantize / (s_scale)
+        
+        assert not torch.isnan(x_quantize).any(), f"after frac scale, {torch.isnan(s_scale).any()}, {torch.isinf(s_scale).any()}, {torch.isinf(x_quantize).any()}, {s_scale.all()}"
         x_quantize = torch.clamp(x_quantize, self.thd_neg, self.thd_pos)
         x_quantize = round_pass(x_quantize)
+       
+        assert not torch.isnan(x_quantize).any(), "after round pass"
         x_quantize = x_quantize * (s_scale)
-
-        # assert (x_quantize == x[:, self.mask]).all()
-        x_result[:, self.mask] = x_quantize
-        x_result[:, ~self.mask] = x[:, ~self.mask]
-        return x_result
+         
+        assert not torch.isnan(x_quantize).any(), "after quant"
+        x_quantize[:,~self.mask] = x_outlier
+        return x_quantize
 
 
 class QuatizedLinear(nn.Linear):
@@ -1627,8 +1635,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             self.model.layers[layer_idx].outlier_ids = outlier_ids[layer_idx]
             self.model.layers[layer_idx].STE = True
             self.model.layers[layer_idx].block_size = block_size
+            self.model.layers[layer_idx].learnable_scales = learnable_scales
             if learnable_scales:
                 self.model.layers[layer_idx].set_learnable_scales()
+        print(self.model)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
