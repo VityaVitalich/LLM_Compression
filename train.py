@@ -424,16 +424,8 @@ def run_train(
         )
 
     if config.ste.enable:
-        outlier_ids, layer_bit = prepare_llama_ste(
-            config.ste.path_to_act_scales,
-            config.ste.fp_features_num,
-            **config.ste.layer_bits,
-        )
-        model.enable_ste(
-            outlier_ids=outlier_ids,
-            layer_bit=layer_bit,
-            block_size=config.ste.block_size,
-        )
+        outlier_ids, layer_bit = prepare_llama_ste(config.ste.path_to_act_scales, config.ste.fp_features_num, **config.ste.layer_bits)
+        model.enable_ste(outlier_ids=outlier_ids, layer_bit=layer_bit, block_size=config.ste.block_size, learnable_scales=config.ste.learnable_scales)
 
     if config.use_lora:
         task_type = TaskType.CAUSAL_LM
