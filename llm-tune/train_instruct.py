@@ -323,6 +323,7 @@ def run_train(
     config_dict['data'] = dict(config_dict['data'])
     config_dict['quant_noise_config'] = dict(config_dict['quant_noise_config'])
     config_dict['outliers'] = dict(config_dict['outliers'])
+    config_dict['QuantizedLinear'] = dict(config_dict['QuantizedLinear'])
     config_dict['NoiseQuant'] = dict(config_dict['NoiseQuant'])
     config = config_dict
 
