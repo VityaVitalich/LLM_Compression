@@ -101,124 +101,6 @@ class ModelArguments:
             "choices": ["auto", "bfloat16", "float16", "float32"],
         },
     )
-    lora_init: bool = field(
-        default=False,
-        metadata={"help": "True: Use zero and gaussian initialization; False: Load adapters from LoftQ in HF hub."},
-    )
-    rank: int = field(
-        default=64,
-        metadata={"help": "Rank of LoRA adapters. LoftQ does not require this config. Used for fp16 LoRA or QLoRA."},
-    )
-    lora_alpha: int = field(
-        default=16,
-        metadata={"help": "LoftQ does not require this config. Used for QLoRA."},
-    )
-    quant_noise_config: dict = field(
-        default=None,
-        metadata={"help": "Parameters to add noise"},
-    )
-
-@dataclass
-class DataTrainingArguments:
-    """
-    Arguments pertaining to what data we are going to input our model for training and eval.
-    """
-
-    eval_dataset_size: int = field(
-        default=1024, metadata={"help": "Size of validation dataset."}
-    )
-    max_train_samples: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
-        },
-    )
-    max_eval_samples: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
-        },
-    )
-    source_max_len: int = field(
-        default=1024,
-        metadata={"help": "Maximum source sequence length. Sequences will be right padded (and possibly truncated)."},
-    )
-    target_max_len: int = field(
-        default=256,
-        metadata={"help": "Maximum target sequence length. Sequences will be right padded (and possibly truncated)."},
-    )
-    dataset: str = field(
-        default='alpaca',
-        metadata={"help": "Which dataset to finetune on. See datamodule for options."}
-    )
-    dataset_format: Optional[str] = field(
-        default=None,
-        metadata={"help": "Which dataset format is used. [alpaca|chip2|self-instruct|hh-rlhf]"}
-    )
-
-
-@dataclass
-class ModelArguments:
-    """
-    Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
-    """
-    model_name_or_path: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": (
-                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
-            )
-        },
-    )
-    config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
-    )
-    tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
-    )
-    cache_dir: Optional[str] = field(
-        default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
-    )
-    use_fast_tokenizer: bool = field(
-        default=False,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
-    )
-    model_revision: str = field(
-        default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
-    )
-    token: str = field(
-        default=None,
-        metadata={
-            "help": (
-                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
-                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
-            )
-        },
-    )
-    trust_remote_code: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
-            )
-        },
-    )
-    torch_dtype: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": (
-                "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
-                "dtype will be automatically derived from the model's weights."
-            ),
-            "choices": ["auto", "bfloat16", "float16", "float32"],
-        },
-    )
     max_memory: int = field(
         default=21,
         metadata={"help": "Free memory per gpu."}
@@ -552,10 +434,13 @@ def run_train(
     config = config_dict
 
     data_args = DataTrainingArguments(
-        dataset = config['data']['dataset'],
-        dataset_format= config['data']['dataset_format'],
-        source_max_len = config['data']['source_max_len'],
-        target_max_len = config['data']['target_max_len']
+        dataset_name = config['data']['dataset_name'],
+        dataset_config_name = config['data']['dataset_config_name'],
+        validation_split_percentage = config['data']['validation_split_percentage'],
+        max_seq_length = config['data']['max_seq_length'],
+        dataset_percentage = config['data']['dataset_percentage'],
+        trust_remote_code = config['data']['trust_remote_code'],
+        preprocessing_num_workers = config['data']['preprocessing_num_workers']
     )
 
     model_args = ModelArguments(
@@ -565,6 +450,7 @@ def run_train(
         use_fast_tokenizer = config['use_fast_tokenizer'],
         token = config['token'], #None,
         trust_remote_code = config['trust_remote_code'],
+        max_memory = config['max_memory'],
         # cache_dir= config.cache_dir,
         rank = config['lora_rank'],
         lora_alpha = config['lora_alpha'],
@@ -593,9 +479,9 @@ def run_train(
         logging_steps = 1,
         do_train = True,
         do_eval = True,
-        report_to = config['report_to']
+        # report_to = config['report_to']
     )
-    
+
     task_type = TaskType.CAUSAL_LM
     target_modules = config['lora_target_modules']
     lora_config = LoraConfig(
@@ -606,7 +492,7 @@ def run_train(
         lora_dropout=0.1,
         target_modules=target_modules,
         init_lora_weights=True,
-        quant_noise_config=model_args.quant_noise_config
+        # quant_noise_config=model_args.quant_noise_config
     )
     
     # If limit on cuda memory is specified enforce the limit
@@ -715,7 +601,7 @@ def run_train(
         assert config['LinearQuantNoise']['quant_target_modules'] is not None, 'quant_target_modules shoud be given!'
         modules_name_dict = {name: module for name, module in model.named_modules()}
         for name, module in modules_name_dict.items():
-            if isinstance(module, nn.Linear) and (name.find('lm_head') == -1) and (name.find('layers.0') != -1):
+            if isinstance(module, nn.Linear) and (name.find('lm_head') == -1):
                 ind = name.rfind(".")
                 if ind == -1:
                     father = modules_name_dict[""]
