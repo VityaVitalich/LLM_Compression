@@ -25,6 +25,12 @@ def llama_parser():
         'meta-llama/Llama-2-70b-hf'
         ]
     )
+    # parser.add_argument(
+    #     '--model', type=str,
+    #     help='LLAMA-2 model to load;',
+    #     default='meta-llama/Llama-2-7b-hf'
+    # )
+
     parser.add_argument(
         '--dataset', type=str, choices=['wikitext2', 'ptb', 'c4'],
         help='Where to extract calibration data from.', default='c4'
@@ -49,7 +55,7 @@ def llama_parser():
     parser.add_argument('--a_bits', type=int, default=16, choices=[4, 8, 16])
 
     # Weight Quantization Params: 
-    parser.add_argument('--w_bits', type=int, default=16, choices=[2, 4, 8, 16])
+    parser.add_argument('--w_bits', type=int, default=16, choices=[2, 3, 4, 8, 16])
     parser.add_argument('--w_clip', action='store_true', help='Use clipping for weight quantization')
     parser.add_argument('--w_asym', action='store_true')
     
@@ -251,6 +257,7 @@ if __name__ == '__main__':
     if args.w_bits < 16 or args.a_bits < 16 or args.int8_2_4 or args.smoothquant or args.sparseGPT:
         if args.fp_features > 0 or args.int8_2_4 or args.smoothquant:
             relative_path = os.path.join(modelutils.act_scale_dir, "{}.pt".format(args.model.split('/')[-1]))
+            # relative_path = "/home/projects/LLM_comression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt"
             act_scales = torch.load(relative_path)
             print('Loaded act_scales from: ', relative_path)
         else:
@@ -361,8 +368,9 @@ if __name__ == '__main__':
             wandb.log({'zero_outlier_linear': number_of_zero_outlier_linear})
         print(f'{number_of_zero_outlier_linear} layers with zero outliers.\n')
 
-    save_path = f"/home/data/compression/quik_cache/llama7b_{args.w_bits}w_{args.a_bits}a_{args.fp_features}fp_true.pt"
-    torch.save(model, save_path)
+    save_path = f"./weights/llama7b_{args.w_bits}w_{args.a_bits}a_{args.fp_features}"
+    # torch.save(model, save_path)
+    model.save_pretrained(save_path)
     datasets = ['wikitext2']
     for dataset in datasets:
         dataloader, testloader = datautils.get_loaders(
