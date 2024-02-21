@@ -15,21 +15,21 @@ DEV = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 def llama_parser():
     parser = argparse.ArgumentParser()
     
-    parser.add_argument(
-        '--model', type=str,
-        help='LLAMA-2 model to load;',
-        default='meta-llama/Llama-2-7b-hf', 
-        choices=[
-        'meta-llama/Llama-2-7b-hf',
-        'meta-llama/Llama-2-13b-hf',
-        'meta-llama/Llama-2-70b-hf'
-        ]
-    )
     # parser.add_argument(
     #     '--model', type=str,
     #     help='LLAMA-2 model to load;',
-    #     default='meta-llama/Llama-2-7b-hf'
+    #     default='meta-llama/Llama-2-7b-hf', 
+    #     choices=[
+    #     'meta-llama/Llama-2-7b-hf',
+    #     'meta-llama/Llama-2-13b-hf',
+    #     'meta-llama/Llama-2-70b-hf'
+    #     ]
     # )
+    parser.add_argument(
+        '--model', type=str,
+        help='LLAMA-2 model to load;',
+        default='meta-llama/Llama-2-7b-hf'
+    )
 
     parser.add_argument(
         '--dataset', type=str, choices=['wikitext2', 'ptb', 'c4'],

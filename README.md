@@ -1,61 +1,81 @@
 # QUIK
-This repository contains the code for QUIK, a method for quantizing the majority of the weights and activations to **4bit** post-training.
+This repository contains the code to fake quantize LLaMa2 model with QUIK and perform knowledge recovery of the quantized model by fine-tuning its columns with outliers.
 
-QUIK is described in the following paper: 
-https://arxiv.org/abs/2310.09259
-
+The method was tested for **3-bit** quantization.
 
 ## Install
 
 ### Dependencies
 
-- cmake
-- C++ compiler (GCC/clang/...)
-- nvcc
+- python 3.10.13
+- pytorch 2.1.0
+- cuda12.1
+- cudnn8
+
+The tests were preformed using the pytorch docker image:
+```bash
+docker pull pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel
+```
 
 ### Instructions
 
 ```bash
-git clone https://github.com/IST-DASLab/QUIK.git
-cd QUIK
-pip install -e .  # or pip install .
+git clone -b export https://github.com/VityaVitalich/LLM_Compression.git
+
+cd LLM_compression/transformers_modified
+pip install .
+
+pip install sentencepiece
+pip install protobuf
+
+pip install lm-eval
+pip install ml_collections
 ```
 
 ## Example
 
-### LLama example
+The experiment includes three steps.
+
+1) Weight quantization of LLaMA2-7b to 3 bit with `QUIK`.
+2) Fine-tuning of columns with outliers of the model based on the instruction dataset `allenai/tulu-v2-sft-mixture`
+3) Benchmark of the quantized model after fine-tuning using `lm-evaluation-harness`
+
+### Quantization
 ```bash
-cd experiments
-pip install -r requirements.txt
-python llama.py --fp_features_num 256 --model meta-llama/Llama-2-7b-hf --hf_token <your_hf_token> --dataset c4 \ 
---w_bits 4 --w_clip --a_bits 4 --save_qmodel_path save_gptq_model_path --int8_down_proj --sim_eval --benchmark 
+cd QUIK
+python python QUIK/experiments/llama.py \
+  --model <path to directory with LLaMA2 model> \
+  --fp_features 128 \
+  --a_bits 16 \
+  --w_bits 3 \
+  --w_clip \
+  --dataset wikitext2
 ```
 
-Benchmark will be run on all available GPUs.
-### Linear layer benchmarks
-Linear layer benchmarks can be run with ``python layer_benchmark.py``. One can vary input size with command line parameters.
+The quantized model will be saved in 
+'./weights/llama7b_{args.w_bits}w_{args.a_bits}a_{args.fp_features}'
 
-
-### Model adapt to QUIK
-First, one has to quantize the model weights using GPTQ algorithm. In `llama.py` it is done with `llama_sequential` function.
-From that we get quantized weights (that are still stored in `torch.float16`).
-Then ones needs create QUIK Linear layers using `qlinear.MixedQLinear.from_float` that must replace original Linear layers. See `llama_replace_with_kernels` in `llama.py`.
-Now the quantized model is ready for use.
-
-
-### Fake Quantization examples
-
-To run the fake quantization example, check [`fake_quant`](https://github.com/IST-DASLab/QUIK/tree/master/experiments/fake_quant) directory.
-
-### Citation 
-
-The full paper is available on arxiv. The full citation is
-
+### Fine-tuning
+```bash
+python llm_tune/train_instruct.py --config_path=llm_tune/configs/llama_instruct.py
 ```
-@article{QUIK,
-  title={QUIK: Towards End-to-end 4-Bit Inference on Generative Large Language Models},
-  author={Ashkboos, Saleh and Markov, Ilia and Frantar, Elias and Zhong, Tingxuan and Wang, Xincheng and Ren, Jie and Hoefler, Torsten and Alistarh, Dan},
-  journal={arXiv preprint arXiv:2310.09259},
-  year={2023}
-}
+
+Before running the script, check the following variables in `llama_instruct.py`
+`config.model_name_or_path` is a dicrectory with the quantized model. Tokenizer should be placed in the directory.
+`config.max_memory` is maximal memory of one GPU which used for the training. 
+`config.output_dir` is a directory where the checkpoints will be saved during the training.
+`config.outliers['path_to_act_scales']` is a path to column scales which related to an importance of a column in weight matrix.
+The scales for LLaMA2-7b are saved in `/QUIK/experiments/act_scales/Llama-2-7b-hf.pt`.
+
+### Benchmark
+Apply `lm-evaluation-harness` to benchmark the quantized model after fine-tuning.
+https://github.com/EleutherAI/lm-evaluation-harness/tree/main
+
+```bash
+lm_eval --model hf \
+  --model_args "pretrained=<path to the directory with quantized model like weights/llama7b_3w_16a_128fp>" \
+  --tasks winogrande,hellaswag,swag,boolq,xwinograd_en \
+  --batch_size 16 \
+  --num_fewshot 0 \
+  --device cuda
 ```
