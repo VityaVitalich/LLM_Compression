@@ -1,2 +1,0 @@
-quant_scales перезаписываются при повтороном вызове add_quant_noise
-change_training_mode приводит к пересчету quant_scales при включенном add_quant_noise
