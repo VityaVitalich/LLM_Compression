@@ -24,8 +24,8 @@ def model_configs():
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    # config.model_name_or_path = '/home/projects/LLaMA/huggingface/Llama-2-7b-hf'
-    config.model_name_or_path = '/home/projects/exp_results/output/instruct/llama7b_test_noise/checkpoint-2'
+    config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
+    # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama-2-7b-wrand-4bit-each-iter'
     # config.model_name_or_path = '/home/projects/Quantization/weights_study/weights/llama-2-7b-wrand-4bit-each-iter'
     config.model_config_name = None
     config.tokenizer_name = None
@@ -36,7 +36,7 @@ def model_configs():
 
     ## SAVING DIRS ###
     # config.cache_dir = None
-    config.output_dir = '/home/projects/exp_results/output/instruct/llama7b_test_noise'
+    config.output_dir = '/home/exp_results/output/instruct/llama7b_test_noise'
 
     ### TRAINING ###
     config.run_name = 'linearquant_4bit'
@@ -77,7 +77,7 @@ def model_configs():
 
     ### Outliers
     config.outliers = {
-        'path_to_act_scales': '/home/projects/LLM_comression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt',
+        'path_to_act_scales': '/home/LLM_compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt',
         'fp_features_num': 128, 
     }
 
@@ -89,11 +89,11 @@ def model_configs():
 
     ### NoiseQuant
     config.NoiseQuant = {
-        'add_quant_noise': False,
-        'predict': False,
+        'add_quant_noise': True,
+        'predict': True,
         'block_size': 128,
-        'compute_scale': False,
-        'layer_bits': {'q': 4, 'k': 4, 'v': 4, 'o': 4, 'down': 4, 'gate': 4, 'up': 4}
+        'compute_scale': True,
+        'layer_bits': {'q': 2, 'k': 2, 'v': 2, 'o': 2, 'down': 2, 'gate': 2, 'up': 2}
     }
 
     ### NORM TWEEKING ###
