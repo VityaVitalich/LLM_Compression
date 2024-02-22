@@ -441,22 +441,6 @@ def run_train(
             outliers_config['fp_features_num'], 
             **noise_config['layer_bits']
         )
-        model.add_quant_noise(
-            outlier_ids=outlier_ids, 
-            layer_bit=layer_bit, 
-            block_size=noise_config['block_size'],
-            training_mode=noise_config['training_mode'], 
-            quant_noise_predict=noise_config['quant_noise_predict']
-        )
-
-    if config['NoiseQuant']['add_quant_noise']:
-        noise_config = config['NoiseQuant']
-        outliers_config= config['outliers']
-        outlier_ids, layer_bit = prepare_llama_quant(
-            outliers_config['path_to_act_scales'], 
-            outliers_config['fp_features_num'], 
-            **noise_config['layer_bits']
-        )
         model.add_quant_noise_to_weight( 
             layer_bit=layer_bit, 
             block_size=noise_config['block_size'],
