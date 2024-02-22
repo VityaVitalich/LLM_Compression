@@ -286,7 +286,7 @@ def format_datasets(
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             load_from_cache_file=not data_args.overwrite_cache,
-            desc=f"Grouping texts in chunks of {block_size}",
+            desc=f"Grouping texts in chunks of {max_seq_length}",
         )
     else:
         lm_datasets = tokenized_datasets.map(
