@@ -1,12 +1,12 @@
 #!/bin/bash
 
-MODEL_PATH="meta-llama/Llama-2-7b-hf"
-OUTPUT_PATH="logs/wikitext_llama2-7b"
-BATCH_SIZE=128
+MODEL_PATH="gpt2" #"meta-llama/Llama-2-7b-hf"
+OUTPUT_PATH="logs/gpt2_wikitext"
+BATCH_SIZE=32
 DATASET_NAME="wikitext"
 DATASET_CONFIG_NAME="wikitext-2-raw-v1"
-BLOCK_SIZE=1024
-DATASET_PERCENTAGE=20
+BLOCK_SIZE=32
+DATASET_PERCENTAGE=1
 CACHE_DIR="/home/data/taxonomy/hf_cache/"
 
 
