@@ -441,12 +441,12 @@ def run_train(
             outliers_config['fp_features_num'], 
             **noise_config['layer_bits']
         )
-        model.add_quant_noise(
-            outlier_ids=outlier_ids, 
+        model.add_quant_noise_to_weight( 
             layer_bit=layer_bit, 
             block_size=noise_config['block_size'],
-            training_mode=noise_config['training_mode'], 
-            quant_noise_predict=noise_config['quant_noise_predict']
+            fp_cols_num=outliers_config['fp_features_num'],
+            compute_scale=noise_config['compute_scale'], 
+            quant_noise_predict=noise_config['predict']
         )
 
     if config['use_lora']:
