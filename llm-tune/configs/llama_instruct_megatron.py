@@ -24,8 +24,8 @@ def model_configs():
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
-    # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama-2-7b-wrand-4bit-each-iter'
+    # config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
+    config.model_name_or_path = '/home/Quantization/weights_study/weights/llama-2-7b-wrand-2bit-each-iter'
     # config.model_name_or_path = '/home/projects/Quantization/weights_study/weights/llama-2-7b-wrand-4bit-each-iter'
     config.model_config_name = None
     config.tokenizer_name = None
