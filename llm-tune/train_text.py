@@ -257,8 +257,8 @@ def format_datasets(
     tokenizer
 ):
     
-    block_size = min(data_args.block_size, tokenizer.model_max_length)
-    print(block_size)
+    max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
+    print(max_seq_length)
 
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(
@@ -269,10 +269,10 @@ def format_datasets(
         total_length = len(concatenated_examples[list(examples.keys())[0]])
         # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
         # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
-        total_length = (total_length // block_size) * block_size
+        total_length = (total_length // max_seq_length) * max_seq_length
         # Split by chunks of max_len.
         result = {
-            k: [t[i: i + block_size] for i in range(0, total_length, block_size)]
+            k: [t[i: i + max_seq_length] for i in range(0, total_length, max_seq_length)]
             for k, t in concatenated_examples.items()
         }
         result["labels"] = result["input_ids"].copy()
@@ -459,7 +459,7 @@ def run_train(
 
 
     #Load and preprocessing dataset
-    
+
     tokenizer.pad_token = tokenizer.eos_token
     raw_datasets = load_hf_datasets(data_args)
     tokenized_datasets = tokenize_datasets(data_args, raw_datasets, tokenizer)
