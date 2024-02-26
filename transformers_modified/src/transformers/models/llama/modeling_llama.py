@@ -429,6 +429,7 @@ class BitNoiseQuant(nn.Module):
         self.mask = mask
 
         # alpha = torch.ones((weight_shape[0], self.quant_cols_num))
+
         alpha = torch.ones((self.weight_shape[0] * self.quant_cols_num, 1))
         self.alpha = nn.Parameter(alpha)
         # self.register_buffer('alpha', alpha)
@@ -458,9 +459,10 @@ class BitNoiseQuant(nn.Module):
         else:
             w_re = w
 
+        out_features = w_re.shape[0]
+        in_features = w_re.shape[1]
+
         if block_size > 0:
-            out_features = w_re.shape[0]
-            in_features = w_re.shape[1]
             # w_re = w_re.reshape((out_features * block_size, in_features // block_size))
             w_re = w_re.reshape((out_features * quant_cols_num, block_size))
 
@@ -577,6 +579,9 @@ class BitNoiseQuant(nn.Module):
         else:
             w_re = w
 
+        out_features = w_re.shape[0]
+        in_features = w_re.shape[1]
+
         if block_size > 0:
             out_features = w_re.shape[0]
             in_features = w_re.shape[1]
@@ -617,9 +622,9 @@ class BitNoiseQuant(nn.Module):
         else:
             w_re = w
 
+        out_features = w_re.shape[0]
+        in_features = w_re.shape[1]
         if block_size > 0:
-            out_features = w_re.shape[0]
-            in_features = w_re.shape[1]
             # w_re = w_re.reshape((out_features * block_size, in_features // block_size))
             w_re = w_re.reshape((out_features * quant_cols_num, block_size))
 
@@ -700,8 +705,9 @@ class QuantizedLinear(nn.Linear):
     ):
         self.add_quant_noise = True
         self.add_quant_noise_predict = add_quant_noise_predict
-        quant_cols_num = self.weight.shape[1] - fp_cols_num
-        if block_size != 0:
+        quant_cols_num = 1
+        if block_size > 0:
+            quant_cols_num = self.weight.shape[1] - fp_cols_num
             quant_cols_num = int(quant_cols_num // block_size)
 
         self.quantizer = NoiseQuant(
@@ -726,8 +732,9 @@ class QuantizedLinear(nn.Linear):
         
         self.add_quant_bitnoise = True
         self.add_quant_bitnoise_predict = add_quant_noise_predict
-        quant_cols_num = self.weight.shape[1] - fp_cols_num
-        if block_size != 0:
+        quant_cols_num = 1
+        if block_size > 0:
+            quant_cols_num = self.weight.shape[1] - fp_cols_num
             quant_cols_num = int(quant_cols_num // block_size)
 
         self.quantizer = BitNoiseQuant(

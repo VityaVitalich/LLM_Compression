@@ -24,8 +24,8 @@ def model_configs():
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
-    # config.model_name_or_path = '/home/exp_results/output/instruct/llama7b_test_noise/checkpoint-2'
+    # config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
+    config.model_name_or_path = '/home/Quantization/weights_study/weights/llama-2-7b-wrand-2bit-each-iter'
     # config.model_name_or_path = '/home/projects/Quantization/weights_study/weights/llama-2-7b-wrand-4bit-each-iter'
     config.model_config_name = None
     config.tokenizer_name = None
@@ -100,7 +100,7 @@ def model_configs():
     config.BitNoiseQuant = {
         'add_quant_noise': True,
         'predict': True,
-        'block_size': 128,
+        'block_size': 0,
         'compute_scale': True,
         'layer_bits': {'q': 2, 'k': 2, 'v': 2, 'o': 2, 'down': 2, 'gate': 2, 'up': 2}
     }
