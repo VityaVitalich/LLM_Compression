@@ -449,6 +449,22 @@ def run_train(
             quant_noise_predict=noise_config['predict']
         )
 
+    if config['BitNoiseQuant']['add_quant_noise']:
+        noise_config = config['BitNoiseQuant']
+        outliers_config= config['outliers']
+        outlier_ids, layer_bit = prepare_llama_quant(
+            outliers_config['path_to_act_scales'], 
+            outliers_config['fp_features_num'], 
+            **noise_config['layer_bits']
+        )
+        model.add_quant_bitnoise_to_weight( 
+            layer_bit=layer_bit, 
+            block_size=noise_config['block_size'],
+            fp_cols_num=outliers_config['fp_features_num'],
+            compute_scale=noise_config['compute_scale'], 
+            quant_noise_predict=noise_config['predict']
+        )
+
     if config['use_lora']:
         task_type = TaskType.CAUSAL_LM
         target_modules = config['lora_target_modules']
