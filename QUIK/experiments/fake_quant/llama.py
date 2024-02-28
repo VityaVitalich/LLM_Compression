@@ -105,6 +105,7 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
     use_cache = model.config.use_cache
     model.config.use_cache = False
     layers = model.model.layers
+    save_dict = {}
 
     model.model.embed_tokens = model.model.embed_tokens.to(dev)
     model.model.norm = model.model.norm.to(dev)
@@ -232,7 +233,25 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                     blocksize=128)
                 else:
                     modules_quik[name].fasterquant(percdamp=args.percdamp, groupsize=-1)
+                
                 quantizers['model.layers.%d.%s' % (i, name)] = modules_quik[name].quantizer
+                save_dict['model.layers.%d.%s' % (i, name)] = {}
+                # save_dict['model.layers.%d.%s' % (i, name)]['dequant_weight'] = modules_quik[name].layer.weight.data.to("cpu")
+                save_dict['model.layers.%d.%s' % (i, name)]['quant_weight'] = modules_quik[name].quant_weight.to("cpu")
+                
+                if modules_quik[name].fp_features > 0:
+                    save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = modules_quik[name].fp_indices
+                    save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = \
+                            modules_quik[name].layer.weight.data[:, modules_quik[name].fp_indices].to("cpu")
+                else:
+                    save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = None
+                    save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = None
+
+                save_dict['model.layers.%d.%s' % (i, name)]['alpha'] = modules_quik[name].quantizer.alpha.to("cpu")
+                # save_dict['model.layers.%d.%s' % (i, name)]['alpha_pq'] = modules_quik[name].quantizer.alpha_pq.to("cpu")
+                save_dict['model.layers.%d.%s' % (i, name)]['bit'] = torch.tensor(modules_quik[name].quantizer.bits)
+                save_dict['model.layers.%d.%s' % (i, name)]['sym'] = torch.tensor(modules_quik[name].quantizer.sym)
+                
                 modules_quik[name].free()
 
         for j in range(args.nsamples):
@@ -247,7 +266,7 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
 
     model.config.use_cache = use_cache
     
-    return quantizers
+    return quantizers, save_dict
 
 
 if __name__ == '__main__':
@@ -334,7 +353,7 @@ if __name__ == '__main__':
             args.dataset, nsamples=args.nsamples, seed=args.seed, model=args.model, seqlen=model.seqlen, 
             synthetic_data=args.synthetic_data, hf_token=args.hf_token
         )
-        quantizers = llama_sequential(model, dataloader, act_scales, DEV, args)
+        quantizers, save_dict = llama_sequential(model, dataloader, act_scales, DEV, args)
     
     
     # Add Input Quantization
@@ -384,6 +403,8 @@ if __name__ == '__main__':
     save_path = args.path_to_save_quant_model
     # torch.save(model, save_path)
     model.save_pretrained(save_path)
+    torch.save(save_dict, f"{save_path}/quantazed_model.pt")
+
     datasets = ['wikitext2']
     for dataset in datasets:
         dataloader, testloader = datautils.get_loaders(
