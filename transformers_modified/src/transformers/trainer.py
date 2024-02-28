@@ -2853,7 +2853,6 @@ class Trainer:
             self._save_tpu(output_dir)
         elif is_sagemaker_mp_enabled():
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
-            print('in sagemaker')
             os.makedirs(output_dir, exist_ok=True)
             state_dict = self.model_wrapped.state_dict()
             if self.args.should_save:
@@ -2885,7 +2884,6 @@ class Trainer:
                 self.model_wrapped.save_checkpoint(output_dir)
 
         elif self.args.should_save:
-            print('in default')
             self._save(output_dir)
 
         # Push to the Hub when `save_model` is called by the user.
@@ -2936,13 +2934,10 @@ class Trainer:
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, supported_classes):
-            print(self.model)
-            self.model.save_pretrained(output_dir)
             if state_dict is None:
                 state_dict = self.model.state_dict()
 
             if isinstance(unwrap_model(self.model), supported_classes):
-                print('unwrappin')
                 unwrap_model(self.model).save_pretrained(
                     output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
                 )
@@ -2955,7 +2950,6 @@ class Trainer:
                 else:
                     torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            print('save pretrained')
             self.model.save_pretrained(
                 output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
             )
