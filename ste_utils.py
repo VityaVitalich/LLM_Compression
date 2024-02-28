@@ -50,6 +50,21 @@ def make_layer_bits(outlier_ids, q=4, k=4, v=4, o=4, down=4, gate=4, up=4):
 
     return layer_bits
 
+def prepare_scales_quik(path):
+    scales = torch.load(path)
+
+    res_scales = {}
+    for k,v in scales.items():
+        layer_number, layer_name = extract_pattern(k)
+        init_scales = v['alpha']
+
+        if int(layer_number) not in res_scales.keys():
+            res_scales[int(layer_number)] = {layer_name: init_scales}
+        else:
+            res_scales[int(layer_number)][layer_name] = init_scales
+
+    return res_scales
+
 def prepare_llama_ste(path_to_act_scales, fp_features_num, **kwargs):
     outlier_ids = get_fp_llama(path_to_act_scales, fp_features_num)
     layer_bits = make_layer_bits(outlier_ids, **kwargs)

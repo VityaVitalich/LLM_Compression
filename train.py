@@ -1,22 +1,28 @@
-from typing import Optional, Dict, Sequence
+from typing import Optional
 from argparse import ArgumentParser
 from pathlib import Path
 
 from tqdm import tqdm
 from dataclasses import dataclass, field
-from itertools import chain
 from functools import partial
 
-import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from tqdm import tqdm
-from peft import PeftModel, get_peft_model, TaskType, LoraConfig
+from peft import get_peft_model, TaskType, LoraConfig
 
-from ste_utils import prepare_llama_ste
-import datasets
-from datasets import load_dataset, load_from_disk
+from ste_utils import prepare_llama_ste, prepare_scales_quik
+from collators import (
+    DataCollatorWithMaskForCausalLM,
+    DistillDataCollatorWithMaskForCausalLM,
+)
+from distill_trainer import DistillTrainer
+from data_utils import (
+    encode_with_messages_format,
+    encode_with_prompt_completion_format,
+    format_datasets,
+    tokenize_datasets,
+    load_hf_datasets,
+)
 
 # import transformers
 from transformers_modified.src.transformers import (
@@ -24,14 +30,9 @@ from transformers_modified.src.transformers import (
     AutoModelForCausalLM,
     Trainer,
     TrainingArguments,
-    default_data_collator,
-    LlamaForCausalLM,
     DataCollatorForSeq2Seq,
 )
 import transformers_modified.src.transformers as transformers
-
-
-IGNORE_INDEX = -100
 
 
 @dataclass
@@ -157,308 +158,6 @@ class DataTrainingArguments:
     )
 
 
-def load_hf_datasets(data_args):
-    # Load the dataset
-    if data_args.dataset_name is not None:
-        # Downloading and loading a dataset from the hub.
-        raw_datasets = load_from_disk(
-            data_args.dataset_name,
-          #  data_args.dataset_config_name,
-           # streaming=True#data_args.streaming,
-        )
-        if "validation" not in raw_datasets.keys():
-            raw_datasets["validation"] = load_dataset(
-                data_args.dataset_name,
-                data_args.dataset_config_name,
-                split=f"train[:{data_args.validation_split_percentage}%]",
-                streaming=data_args.streaming,
-            )
-            raw_datasets["train"] = load_dataset(
-                data_args.dataset_name,
-                data_args.dataset_config_name,
-                split=f"train[{data_args.validation_split_percentage}%:]",
-                streaming=data_args.streaming,
-            )
-
-    if data_args.dataset_percentage < 100:
-        dataset_frac = data_args.dataset_percentage / 100
-        dataset_parts = raw_datasets["train"].train_test_split(train_size=dataset_frac)
-        raw_datasets["train"] = dataset_parts["train"]
-        dataset_parts = raw_datasets["validation"].train_test_split(
-            test_size=dataset_frac
-        )
-        raw_datasets["validation"] = dataset_parts["test"]
-
-    return raw_datasets
-
-
-def tokenize_datasets(data_args, raw_datasets, tokenizer):
-    dataset_type = list(raw_datasets.keys())[0]
-    column_names = list(raw_datasets[dataset_type].features)
-    text_column_name = "text" if "text" in column_names else column_names[0]
-
-    def tokenize_function(examples):
-        output = tokenizer(examples[text_column_name])
-        return output
-
-    if not data_args.streaming:
-        tokenized_datasets = raw_datasets.map(
-            tokenize_function,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on dataset",
-        )
-    else:
-        tokenized_datasets = raw_datasets.map(
-            tokenize_function,
-            batched=True,
-            remove_columns=column_names,
-        )
-
-    return tokenized_datasets
-
-
-def format_datasets(data_args, tokenized_datasets, tokenizer):
-    block_size = min(data_args.block_size, tokenizer.model_max_length)
-    print(block_size)
-
-    # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
-    def group_texts(examples):
-        # Concatenate all texts.
-        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
-        total_length = len(concatenated_examples[list(examples.keys())[0]])
-        # We drop the small remainder, and if the total_length < block_size  we exclude this batch and return an empty dict.
-        # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
-        total_length = (total_length // block_size) * block_size
-        # Split by chunks of max_len.
-        result = {
-            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
-            for k, t in concatenated_examples.items()
-        }
-        result["labels"] = result["input_ids"].copy()
-
-        return result
-
-    if not data_args.streaming:
-        lm_datasets = tokenized_datasets.map(
-            group_texts,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc=f"Grouping texts in chunks of {block_size}",
-        )
-    else:
-        lm_datasets = tokenized_datasets.map(
-            group_texts,
-            batched=True,
-        )
-
-    return lm_datasets
-
-def encode_with_prompt_completion_format(example, tokenizer, max_seq_length):
-    '''
-    Here we assume each example has 'prompt' and 'completion' fields.
-    We concatenate prompt and completion and tokenize them together because otherwise prompt will be padded/trancated 
-    and it doesn't make sense to follow directly with the completion.
-    '''
-    # if prompt doesn't end with space and completion doesn't start with space, add space
-    if not example['prompt'].endswith((' ', '\n', '\t')) and not example['completion'].startswith((' ', '\n', '\t')):
-        example_text = example['prompt'] + ' ' + example['completion']
-    else:
-        example_text = example['prompt'] + example['completion']
-    example_text = example_text + tokenizer.eos_token
-    tokenized_example = tokenizer(example_text, return_tensors='pt', max_length=max_seq_length, truncation=True)
-    input_ids = tokenized_example.input_ids
-    labels = input_ids.clone()
-    tokenized_prompt = tokenizer(example['prompt'], return_tensors='pt', max_length=max_seq_length, truncation=True)
-    # mask the prompt part for avoiding loss
-    labels[:, :tokenized_prompt.input_ids.shape[1]] = -100
-    attention_mask = torch.ones_like(input_ids)
-    return {
-        'input_ids': input_ids.flatten(),
-        'labels': labels.flatten(),
-        'attention_mask': attention_mask.flatten(),
-    }
-
-def encode_with_messages_format(example, tokenizer, max_seq_length):
-    '''
-    Here we assume each example has a 'messages' field Each message is a dict with 'role' and 'content' fields.
-    We concatenate all messages with the roles as delimiters and tokenize them together.
-    '''
-    messages = example['messages']
-    if len(messages) == 0:
-        raise ValueError('messages field is empty.')
-    
-    def _concat_messages(messages):
-        message_text = ""
-        for message in messages:
-            if message["role"] == "system":
-                message_text += "<|system|>\n" + message["content"].strip() + "\n"
-            elif message["role"] == "user":
-                message_text += "<|user|>\n" + message["content"].strip() + "\n"
-            elif message["role"] == "assistant":
-                message_text += "<|assistant|>\n" + message["content"].strip() + tokenizer.eos_token + "\n"
-            else:
-                raise ValueError("Invalid role: {}".format(message["role"]))
-        return message_text
-        
-    example_text = _concat_messages(messages).strip()
-    tokenized_example = tokenizer(example_text, return_tensors='pt', max_length=max_seq_length, truncation=True)
-    input_ids = tokenized_example.input_ids
-    labels = input_ids.clone()
-
-    # mask the non-assistant part for avoiding loss
-    for message_idx, message in enumerate(messages):
-        if message["role"] != "assistant":
-            if message_idx == 0:
-                message_start_idx = 0
-            else:
-                message_start_idx = tokenizer(
-                    _concat_messages(messages[:message_idx]), return_tensors='pt', max_length=max_seq_length, truncation=True
-                ).input_ids.shape[1]
-            if message_idx < len(messages) - 1 and messages[message_idx+1]["role"] == "assistant":
-                # here we also ignore the role of the assistant
-                messages_so_far = _concat_messages(messages[:message_idx+1]) + "<|assistant|>\n"
-            else:
-                messages_so_far = _concat_messages(messages[:message_idx+1])
-            message_end_idx = tokenizer(
-                messages_so_far,
-                return_tensors='pt', 
-                max_length=max_seq_length, 
-                truncation=True
-            ).input_ids.shape[1]
-            labels[:, message_start_idx:message_end_idx] = -100
-            
-            if message_end_idx >= max_seq_length:
-                break
-
-    attention_mask = torch.ones_like(input_ids)
-    return {
-        'input_ids': input_ids.flatten(),
-        'labels': labels.flatten(),
-        'attention_mask': attention_mask.flatten(),
-    }
-
-@dataclass
-class DataCollatorWithMaskForCausalLM(object):
-    tokenizer: transformers.PreTrainedTokenizer
-
-    def __call__(self, batch):
-        input_ids = []
-        labels = []
-        attention_masks = []
-
-        for item_dict in batch:
-            input_ids.append(torch.tensor(item_dict["input_ids"]))
-            attention_masks.append(torch.tensor(item_dict["attention_mask"]))
-            label = torch.tensor(item_dict["labels"])
-            label[:-1] = IGNORE_INDEX
-            labels.append(label)
-
-        input_ids = torch.vstack(input_ids)
-        attention_masks = torch.vstack(attention_masks)
-        labels = torch.vstack(labels)
-
-        data_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_masks,
-        }
-        if labels is not None:
-            data_dict["labels"] = labels
-        return data_dict
-
-@dataclass
-class DistillDataCollatorWithMaskForCausalLM(object):
-    tokenizer: transformers.PreTrainedTokenizer
-
-    def __call__(self, batch):
-        input_ids = []
-        labels = []
-        attention_masks = []
-        logits = []
-
-        for item_dict in batch:
-            input_ids.append(torch.tensor(item_dict["input_ids"]))
-            attention_masks.append(torch.tensor(item_dict["attention_mask"]))
-            label = torch.tensor(item_dict["labels"])
-            label[:-1] = IGNORE_INDEX
-            labels.append(label)
-            logits.append(torch.tensor(item_dict['logits']).unsqueeze(0))
-
-        input_ids = torch.vstack(input_ids)
-        attention_masks = torch.vstack(attention_masks)
-        labels = torch.vstack(labels)
-        logits = torch.vstack(logits)
-            
-        data_dict = {
-            'input_ids': input_ids,
-            'attention_mask': attention_masks,
-            'teacher_logits': logits
-        }
-        if labels is not None:
-            data_dict['labels'] = labels
-        return data_dict
-    
-class DistillTrainer(Trainer):
-    def __init__(self, model, temperature=None, lambda_param=None,  *args, **kwargs):
-        super().__init__(model=model, *args, **kwargs)
-        self.loss_function = nn.KLDivLoss(reduction="batchmean")
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.temperature = temperature
-        self.lambda_param = lambda_param
-        
-    def compute_loss(self, model, inputs, return_outputs=False):
-        """
-        How the loss is computed by Trainer. By default, all models return the loss in the first element.
-
-        Subclass and override for custom behavior.
-        """
-        if self.label_smoother is not None and "labels" in inputs:
-            labels = inputs.pop("labels")
-        else:
-            labels = None
-
-        logits = inputs.pop("teacher_logits")
-
-        outputs = model(**inputs)
-
-        #https://huggingface.co/docs/transformers/tasks/knowledge_distillation_for_image_classification
-        soft_teacher = F.softmax(logits / self.temperature, dim=-1)
-        soft_student = F.log_softmax(outputs.logits / self.temperature, dim=-1)
-
-        # Compute the loss
-        distillation_loss = self.loss_function(soft_student, soft_teacher) * (self.temperature ** 2)
-
-        # Save past state if it exists
-        # TODO: this needs to be fixed and made cleaner later.
-        if self.args.past_index >= 0:
-            self._past = outputs[self.args.past_index]
-
-        if labels is not None:
-            unwrapped_model = unwrap_model(model)
-            if _is_peft_model(unwrapped_model):
-                model_name = unwrapped_model.base_model.model._get_name()
-            else:
-                model_name = unwrapped_model._get_name()
-            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
-                student_target_loss = self.label_smoother(outputs, labels, shift_labels=True)
-            else:
-                student_target_loss = self.label_smoother(outputs, labels)
-        else:
-            if isinstance(outputs, dict) and "loss" not in outputs:
-                raise ValueError(
-                    "The model did not return a loss from the inputs, only the following keys: "
-                    f"{','.join(outputs.keys())}. For reference, the inputs it received are {','.join(inputs.keys())}."
-                )
-            # We don't use .loss here since the model may return tuples instead of ModelOutput.
-            student_target_loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
-
-        # Calculate final loss
-        loss = (1. - self.lambda_param) * student_target_loss + self.lambda_param * distillation_loss
-        return (loss, outputs) if return_outputs else loss
-
 @torch.no_grad()
 def create_mask(weight, outlier_fraction):
     w = torch.clone(weight).float()
@@ -520,11 +219,18 @@ def run_train(
             config.ste.fp_features_num,
             **config.ste.layer_bits,
         )
+
+        if config.ste.quik_scales_path is not None:
+            quik_scales = prepare_scales_quik(config.ste.quik_scales_path)
+        else:
+            quik_scales = None
+
         model.enable_ste(
             outlier_ids=outlier_ids,
             layer_bit=layer_bit,
             block_size=config.ste.block_size,
-            learnable_scales=config.ste.learnable_scales
+            learnable_scales=config.ste.learnable_scales,
+            quik_scales=quik_scales,
         )
 
     if config.use_lora:
@@ -567,14 +273,21 @@ def run_train(
             model_args.model_name_or_path, **tokenizer_kwargs
         )
 
-    if isinstance(tokenizer, transformers.LlamaTokenizer) or isinstance(tokenizer, transformers.LlamaTokenizerFast):
-        num_added_tokens = tokenizer.add_special_tokens({
-            "bos_token": "<s>",
-            "eos_token": "</s>",
-            "unk_token": "<unk>",
-            "pad_token": "<pad>",
-        })
-        assert num_added_tokens in [0, 1], "LlamaTokenizer should only add one special token - the pad_token, or no tokens if pad token present."
+    if isinstance(tokenizer, transformers.LlamaTokenizer) or isinstance(
+        tokenizer, transformers.LlamaTokenizerFast
+    ):
+        num_added_tokens = tokenizer.add_special_tokens(
+            {
+                "bos_token": "<s>",
+                "eos_token": "</s>",
+                "unk_token": "<unk>",
+                "pad_token": "<pad>",
+            }
+        )
+        assert num_added_tokens in [
+            0,
+            1,
+        ], "LlamaTokenizer should only add one special token - the pad_token, or no tokens if pad token present."
     else:
         if not tokenizer.pad_token_id:
             tokenizer.pad_token = tokenizer.eos_token
@@ -587,15 +300,17 @@ def run_train(
 
     print(len(tokenizer), embedding_size)
 
-
     # Load and preprocessing dataset
     raw_datasets = load_hf_datasets(data_args)
 
     if not config.distillation:
         ### instruct
         if config.data.instruct:
-        # Preprocessing the datasets.
-            if "prompt" in raw_datasets["train"].column_names and "completion" in raw_datasets["train"].column_names:
+            # Preprocessing the datasets.
+            if (
+                "prompt" in raw_datasets["train"].column_names
+                and "completion" in raw_datasets["train"].column_names
+            ):
                 encode_function = partial(
                     encode_with_prompt_completion_format,
                     tokenizer=tokenizer,
@@ -612,14 +327,22 @@ def run_train(
                 encode_function,
                 batched=False,
                 num_proc=data_args.preprocessing_num_workers,
-                remove_columns=[name for name in raw_datasets["train"].column_names if name not in ["input_ids", "labels", "attention_mask"]],
+                remove_columns=[
+                    name
+                    for name in raw_datasets["train"].column_names
+                    if name not in ["input_ids", "labels", "attention_mask"]
+                ],
                 desc="Tokenizing and reformatting instruction data",
             )
 
             lm_datasets.set_format(type="pt")
-            lm_datasets = lm_datasets.filter(lambda example: (example['labels'] != -100).any())
-            
-            data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding="longest")
+            lm_datasets = lm_datasets.filter(
+                lambda example: (example["labels"] != -100).any()
+            )
+
+            data_collator = DataCollatorForSeq2Seq(
+                tokenizer=tokenizer, model=model, padding="longest"
+            )
         else:
             tokenized_datasets = tokenize_datasets(data_args, raw_datasets, tokenizer)
             lm_datasets = format_datasets(data_args, tokenized_datasets, tokenizer)
@@ -629,7 +352,7 @@ def run_train(
         lm_datasets = raw_datasets
         print(lm_datasets)
         data_collator = DistillDataCollatorWithMaskForCausalLM(tokenizer=tokenizer)
-    
+
     if config.norm_tweek:
         layernorm_names = [
             f"model.layers.{layer_block_num}.input_layernorm.weight"
@@ -671,8 +394,8 @@ def run_train(
             tokenizer=tokenizer,
             # Data collator will default to DataCollatorWithPadding, so we change it.
             data_collator=data_collator,
-            temperature=config.temperature, 
-            lambda_param=config.lambda_param
+            temperature=config.temperature,
+            lambda_param=config.lambda_param,
         )
     else:
         trainer = Trainer(
@@ -750,7 +473,7 @@ def main():
         do_eval=True,
         report_to=config.report_to,
         run_name=config.run_name,
-        remove_unused_columns=(not config.distillation) # False when distilling
+        remove_unused_columns=(not config.distillation),  # False when distilling
     )
 
     run_train(model_args, data_args, training_args, config)

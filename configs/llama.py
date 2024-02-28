@@ -7,16 +7,16 @@ def model_configs():
 
     ### DATASET ###
     data = config.data = ml_collections.ConfigDict()
-    data.dataset_name = "/home/data/LLM_Compression/logs/test_dataset" #'allenai/tulu-v2-sft-mixture'
-    data.dataset_config_name = None #'wikitext-2-raw-v1'
+    data.dataset_name = 'wikitext' #"/home/data/LLM_Compression/logs/test_dataset" #'allenai/tulu-v2-sft-mixture'
+    data.dataset_config_name = 'wikitext-2-raw-v1'
     data.valid_split = 50
     data.block_size = 32
-    data.dataset_percentage = 100
+    data.dataset_percentage = 1
     data.instruct = False
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = "gpt2" #"meta-llama/Llama-2-7b-hf" #'EleutherAI/pythia-70m'
+    config.model_name_or_path = '/home/data/compression/quik_cache/llama7b_4bit_128fp_quant_scales' #"meta-llama/Llama-2-7b-hf" #'EleutherAI/pythia-70m'
     config.model_config_name = None
     config.tokenizer_name = None
     config.token = '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'
@@ -35,7 +35,7 @@ def model_configs():
     config.gradient_accumulation_steps = 1
     config.gradient_checkpointing = False
     config.report_to = 'wandb'
-    config.run_name = 'distill test'
+    config.run_name = 'quik scales test'
     ### eval ###
     config.evaluation_strategy = 'steps'
     config.eval_steps = 2
@@ -66,15 +66,16 @@ def model_configs():
 
     ### STE ###
     ste = config.ste = ml_collections.ConfigDict()
-    ste.enable = False
+    ste.enable = True
     ste.path_to_act_scales = '/home/data/LLM_Compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt'
     ste.fp_features_num = 128
-    ste.layer_bits = {'q': 2, 'k': 4, 'v': 4, 'o': 4, 'down': 4, 'gate': 4, 'up': 4}
+    ste.layer_bits = {'q': 4, 'k': 4, 'v': 4, 'o': 4, 'down': 4, 'gate': 4, 'up': 4}
     ste.block_size = 64
     ste.learnable_scales = True
+    ste.quik_scales_path = '/home/data/compression/quik_cache/llama7b_4bit_128fp_quant_scales/quantazed_model.pt' # either put None
 
     ### Distillation ###
-    config.distillation = True
+    config.distillation = False
     config.temperature = 1
     config.lambda_param = 1
     return config

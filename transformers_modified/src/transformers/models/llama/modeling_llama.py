@@ -278,10 +278,28 @@ class LsqQuan(nn.Module):
         self.mask = torch.ones(x.size(1), dtype=torch.bool)
         self.mask[self.outlier_ids] = False
         x_quantize = x[:, self.mask]
+        x = x_quantize.flatten(1)
 
-        self.s = nn.Parameter(
-            x.detach().abs().mean(dim=0) * 2 / (self.thd_pos**0.5)
-        )
+        tmp = torch.zeros(x.shape[0], device=x.device)
+        xmin = torch.minimum(x.min(1)[0], tmp)
+        xmax = torch.maximum(x.max(1)[0], tmp)
+        xmax = torch.maximum(torch.abs(xmin), xmax)
+        tmp = xmin < 0
+        if torch.any(tmp):
+            xmin[tmp] = -xmax[tmp]
+        tmp = (xmin == 0) & (xmax == 0)
+        xmin[tmp] = -1
+        xmax[tmp] = +1
+        
+        alpha = xmax
+        scale = xmax / torch.tensor(self.bit)
+
+        self.s = nn.Parameter(scale.unsqueeze(1))
+
+    def init_from_quik(self, x, alpha):
+        self.mask = torch.ones(x.size(1), dtype=torch.bool)
+        self.mask[self.outlier_ids] = False
+        self.s = nn.Parameter((alpha / torch.tensor(self.bit)).type(x.dtype))
 
     def forward(self, x):
         if self.bit >= 32:
@@ -321,7 +339,7 @@ class QuatizedLinear(nn.Linear):
         else:
             return F.linear(input, self.weight, self.bias)
 
-    def __init__(self, linear, learnable_scales=False, bit=4, outlier_ids=[0]):
+    def __init__(self, linear, learnable_scales=False, bit=4, outlier_ids=[0], quik_scales=None):
         super().__init__(
             in_features=linear.in_features,
             out_features=linear.out_features,
@@ -332,7 +350,11 @@ class QuatizedLinear(nn.Linear):
         self.load_state_dict(linear.state_dict())
 
         self.quantizer = LsqQuan(bit=bit, symmetric=True, outlier_ids=outlier_ids)
-        self.quantizer.init_from(self.weight)
+
+        if quik_scales is None:
+            self.quantizer.init_from(self.weight)
+        else:
+            self.quantizer.init_from_quik(self.weight, quik_scales)
 
 
 class LlamaRMSNorm(nn.Module):
@@ -1246,7 +1268,7 @@ class LlamaDecoderLayer(nn.Module):
                 idx=self.outlier_ids[layer_name],
             )
 
-    def set_learnable_scales(self):
+    def set_learnable_scales(self, layer_scales=None):
         self.learnable_scales = True
 
         layers = ["mlp", "self_attn"]
@@ -1261,13 +1283,21 @@ class LlamaDecoderLayer(nn.Module):
 
                 cur_bit = self.layer_bit[f"{layer_name}.{proj_name}"]
                 outlier_ids = self.outlier_ids[f"{layer_name}.{proj_name}"]
+
+                if layer_scales is None:
+                    cur_scales = None
+                else:
+                    cur_scales = layer_scales[f'{layer_name}.{proj_name}']
+
                 quantized_projection = QuatizedLinear(
                     cur_projection,
                     learnable_scales=True,
                     bit=cur_bit,
                     outlier_ids=outlier_ids,
+                    quik_scales=cur_scales
                 )
                 setattr(cur_layer, proj_name, quantized_projection)
+                
 
 
 LLAMA_START_DOCSTRING = r"""
@@ -1623,7 +1653,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.model.config.clip_softmax_gamma = gamma
         self.model.config.clip_softmax_eta = eta
 
-    def enable_ste(self, outlier_ids, layer_bit, block_size=64, learnable_scales=False):
+    def enable_ste(self, outlier_ids, layer_bit, block_size=64, learnable_scales=False, quik_scales=None):
         self.model.config.outlier_ids = outlier_ids
         self.model.config.layer_bit = layer_bit
         self.model.config.STE = True
@@ -1637,7 +1667,11 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             self.model.layers[layer_idx].block_size = block_size
             self.model.layers[layer_idx].learnable_scales = learnable_scales
             if learnable_scales:
-                self.model.layers[layer_idx].set_learnable_scales()
+                if quik_scales is None:
+                    layer_scales = None
+                else:
+                    layer_scales = quik_scales[layer_idx]
+                self.model.layers[layer_idx].set_learnable_scales(layer_scales=layer_scales)
         print(self.model)
 
     def get_input_embeddings(self):
