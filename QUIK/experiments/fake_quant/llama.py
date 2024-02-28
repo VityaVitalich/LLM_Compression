@@ -237,20 +237,20 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 quantizers['model.layers.%d.%s' % (i, name)] = modules_quik[name].quantizer
                 save_dict['model.layers.%d.%s' % (i, name)] = {}
                 # save_dict['model.layers.%d.%s' % (i, name)]['dequant_weight'] = modules_quik[name].layer.weight.data.to("cpu")
-                save_dict['model.layers.%d.%s' % (i, name)]['quant_weight'] = modules_quik[name].quant_weight.to("cpu")
+            #    save_dict['model.layers.%d.%s' % (i, name)]['quant_weight'] = modules_quik[name].quant_weight.to("cpu")
                 
-                if modules_quik[name].fp_features > 0:
-                    save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = modules_quik[name].fp_indices
-                    save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = \
-                            modules_quik[name].layer.weight.data[:, modules_quik[name].fp_indices].to("cpu")
-                else:
-                    save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = None
-                    save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = None
+                # if modules_quik[name].fp_features > 0:
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = modules_quik[name].fp_indices
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = \
+                #             modules_quik[name].layer.weight.data[:, modules_quik[name].fp_indices].to("cpu")
+                # else:
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = None
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = None
 
                 save_dict['model.layers.%d.%s' % (i, name)]['alpha'] = modules_quik[name].quantizer.alpha.to("cpu")
                 # save_dict['model.layers.%d.%s' % (i, name)]['alpha_pq'] = modules_quik[name].quantizer.alpha_pq.to("cpu")
-                save_dict['model.layers.%d.%s' % (i, name)]['bit'] = torch.tensor(modules_quik[name].quantizer.bits)
-                save_dict['model.layers.%d.%s' % (i, name)]['sym'] = torch.tensor(modules_quik[name].quantizer.sym)
+               # save_dict['model.layers.%d.%s' % (i, name)]['bit'] = torch.tensor(modules_quik[name].quantizer.bits)
+               # save_dict['model.layers.%d.%s' % (i, name)]['sym'] = torch.tensor(modules_quik[name].quantizer.sym)
                 
                 modules_quik[name].free()
 
