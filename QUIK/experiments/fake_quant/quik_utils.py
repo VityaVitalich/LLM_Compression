@@ -36,7 +36,9 @@ class QUIK:
             self.col_perm = act_scales.sort()[1]
             self.inv_col_perm = torch.zeros_like(self.col_perm)
             self.inv_col_perm[self.col_perm] = torch.arange(self.col_perm.numel())
-         
+        
+        self.quant_weight = None
+
     def add_batch(self, inp, out):
 
         if len(inp.shape) == 2:
@@ -85,6 +87,8 @@ class QUIK:
         H = torch.linalg.cholesky(H, upper=True)
         Hinv = H
 
+        q_int = torch.zeros_like(W)
+
         for i1 in range(0, self.columns, blocksize):
             i2 = min(i1 + blocksize, self.columns)
             if i1 >= self.columns - self.fp_features and self.fp_features > 0:
@@ -98,10 +102,13 @@ class QUIK:
             Losses1 = torch.zeros_like(W1)
             Hinv1 = Hinv[i1:i2, i1:i2]
 
+            q_int1 = torch.zeros_like(W1)
+
             for i in range(count):
                 if i + i1 >= self.columns - self.fp_features and self.fp_features > 0:
                     Q1[:, i] = W1[:, i]
                     continue
+
                 w = W1[:, i]
                 d = Hinv1[i, i]
 
@@ -110,11 +117,14 @@ class QUIK:
                         self.quantizer.find_params(W[:, (i1 + i):(i1 + i + groupsize)])
                 
                 q = self.quantizer.quantize(w.unsqueeze(1)).flatten()
-                
-                Q1[:, i] = q
-                Losses1[:, i] = (w - q) ** 2 / d ** 2
+                q_int1[:, i] = q
 
-                err1 = (w - q) / d
+                w_dq = self.quantizer.scale.flatten() * q
+                Q1[:, i] = w_dq
+            
+                Losses1[:, i] = (w - w_dq) ** 2 / d ** 2
+
+                err1 = (w - w_dq) / d
                 W1[:, i:] -= err1.unsqueeze(1).matmul(Hinv1[i, i:].unsqueeze(0))
                 Err1[:, i] = err1
 
@@ -123,12 +133,20 @@ class QUIK:
 
             W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
 
+            q_int[:, i1:i2] = q_int1
+
         torch.cuda.synchronize()
+
+        # self.quantizer.post_quant_find_params(self.layer.weight.data[:, self.int_indices], 
+        #                                       q_int[:, :(self.columns - self.fp_features)])
+
         self.layer.weight.data = Q.reshape(self.layer.weight.shape).to(self.layer.weight.data.dtype)
+        self.quant_weight = q_int.reshape(self.layer.weight.shape).to(self.layer.weight.data.dtype)
 
         # Permut Back the weights
         if self.fp_features > 0:
             self.layer.weight.data = self.layer.weight.data[:, self.inv_col_perm]
+            self.quant_weight = self.quant_weight[:, self.inv_col_perm]
             
     def free(self):
         self.H = None
