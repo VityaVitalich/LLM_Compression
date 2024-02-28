@@ -74,5 +74,5 @@ if __name__ == '__main__':
     tokenized_datasets = tokenize_datasets(data_args, raw_datasets, tokenizer)
     lm_datasets = format_datasets(data_args, tokenized_datasets, tokenizer)
 
-    dataset_with_logits = lm_datasets.map(format_logit, batched=True, batch_size=args.batch_size)
+    dataset_with_logits = lm_datasets.map(format_logit, batched=True, batch_size=args.batch_size, desc=f"Obtaining logits")
     dataset_with_logits.save_to_disk(args.save_dir)

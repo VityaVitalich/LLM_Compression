@@ -1,7 +1,7 @@
 #!/bin/bash
 
-MODEL_PATH="logs/fine_tuning/full/ste_learnable/checkpoint-4000/"
-OUTPUT_PATH="logs/llama7b-4b-128fp-ste_learnable"
+MODEL_PATH="/home/cache/llama7b_4w_16a_128fp"
+OUTPUT_PATH="logs/llama7b-4w"
 
 lm_eval \
 --model hf \

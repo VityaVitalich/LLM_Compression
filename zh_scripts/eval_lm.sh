@@ -26,6 +26,7 @@ srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trini
     export HF_TOKEN=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;
     export SAVING_DIR=/home/cache/;
     export WANDB_API_KEY=2b740bffb4c588c7274a6e8cf4e39bd56344d492;
+    export CUDA_LAUNCH_BLOCKING=1;
     cd /home/LLM_Compression;
     ls;
     nvidia-smi;

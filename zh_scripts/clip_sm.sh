@@ -30,6 +30,7 @@ srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trini
     ls;
     nvidia-smi;
     pip list;
+    CUDA_LAUNCH_BLOCKING=1;
     sh fine_tune.sh;
 '
 

@@ -1,13 +1,13 @@
 #!/bin/bash
 
-MODEL_PATH="gpt2" #"meta-llama/Llama-2-7b-hf"
-OUTPUT_PATH="logs/gpt2_wikitext"
-BATCH_SIZE=32
+MODEL_PATH="meta-llama/Llama-2-7b-hf"
+OUTPUT_PATH="/home/cache/wikitext_llama-7b"
+BATCH_SIZE=16
 DATASET_NAME="wikitext"
 DATASET_CONFIG_NAME="wikitext-2-raw-v1"
-BLOCK_SIZE=32
-DATASET_PERCENTAGE=1
-CACHE_DIR="/home/data/taxonomy/hf_cache/"
+BLOCK_SIZE=1024
+DATASET_PERCENTAGE=40
+CACHE_DIR="/home/cache/"
 
 
 python collect_logits.py \

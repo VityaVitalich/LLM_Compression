@@ -7,41 +7,41 @@ def model_configs():
 
     ### DATASET ###
     data = config.data = ml_collections.ConfigDict()
-    data.dataset_name = 'wikitext' #"/home/data/LLM_Compression/logs/test_dataset" #'allenai/tulu-v2-sft-mixture'
-    data.dataset_config_name = 'wikitext-2-raw-v1'
-    data.valid_split = 50
-    data.block_size = 32
-    data.dataset_percentage = 1
-    data.instruct = False
+    data.dataset_name = 'allenai/tulu-v2-sft-mixture'
+    data.dataset_config_name =None #'wikitext-2-raw-v1'
+    data.valid_split = 5
+    data.block_size = 1024
+    data.dataset_percentage = 10
+    data.instruct = True
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = '/home/data/compression/quik_cache/llama7b_4bit_128fp_quant_scales' #"meta-llama/Llama-2-7b-hf" #'EleutherAI/pythia-70m'
+    config.model_name_or_path = "/home/cache/llama7b_4w_16a_128fp" #'EleutherAI/pythia-70m'
     config.model_config_name = None
     config.tokenizer_name = None
     config.token = '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'
 
     ### SAVING DIRS ###
-    config.cache_dir = '/home/data/taxonomy/hf_cache/'
-    config.output_dir = '/home/data/LLM_Compression/logs/fine_tuning/full/test_distill/'
+    config.cache_dir = '/home/cache/'
+    config.output_dir = '/home/LLM_Compression/logs/fine_tuning/full/4w_ste_learnable_sft/'
     
     ### TRAINING ###
     config.learning_rate = 3e-5
     config.weight_decay = 1e-3
     config.seed = 57
     config.num_train_epochs = 1
-    config.per_device_train_batch_size = 1
-    config.per_device_eval_batch_size = 1
-    config.gradient_accumulation_steps = 1
+    config.per_device_train_batch_size = 8
+    config.per_device_eval_batch_size = 8
+    config.gradient_accumulation_steps = 2
     config.gradient_checkpointing = False
     config.report_to = 'wandb'
-    config.run_name = 'quik scales test'
+    config.run_name = '4w_ste_learnable_sft'
     ### eval ###
     config.evaluation_strategy = 'steps'
-    config.eval_steps = 2
+    config.eval_steps = 250
     ### save ###
     config.save_strategy = 'steps'
-    config.save_steps = 500
+    config.save_steps = 250
 
 
     ### SOFTMAX CLIP ###
