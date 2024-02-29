@@ -156,6 +156,9 @@ class DataTrainingArguments:
         default=100,
         metadata={"help": "The number of percentage to take from entire dataset"},
     )
+    seed: Optional[int] = field(
+        default=42,
+    )
 
 
 @torch.no_grad()
@@ -439,6 +442,7 @@ def main():
         validation_split_percentage=config.data.valid_split,
         block_size=config.data.block_size,
         dataset_percentage=config.data.dataset_percentage,
+        seed=config.seed
     )
 
     model_args = ModelArguments(

@@ -30,10 +30,10 @@ def load_hf_datasets(data_args):
 
     if data_args.dataset_percentage < 100:
         dataset_frac = data_args.dataset_percentage / 100
-        dataset_parts = raw_datasets["train"].train_test_split(train_size=dataset_frac)
+        dataset_parts = raw_datasets["train"].train_test_split(train_size=dataset_frac, seed=data_args.seed)
         raw_datasets["train"] = dataset_parts["train"]
         dataset_parts = raw_datasets["validation"].train_test_split(
-            test_size=dataset_frac
+            test_size=dataset_frac, seed=data_args.seed
         )
         raw_datasets["validation"] = dataset_parts["test"]
 
