@@ -2934,6 +2934,7 @@ class Trainer:
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, supported_classes):
+            self.model.save_pretrained(output_dir)
             if state_dict is None:
                 state_dict = self.model.state_dict()
 
