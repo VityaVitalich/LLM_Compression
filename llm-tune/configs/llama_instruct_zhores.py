@@ -34,10 +34,10 @@ def model_configs():
 
     ## SAVING DIRS ###
     # config.cache_dir = None
-    config.output_dir = './exp_results/instruct/llama_with_noise4bit_fp_sft_transformers'
+    config.output_dir = './exp_results/instruct/llama_with_noise2bit_fp_sft_transformers_bitnoise_block0'
 
     ### TRAINING ###
-    config.run_name = 'quant_3bit'
+    config.run_name = 'quant_2bit'
     config.resume_from_checkpoint = None
     # config.num_train_epochs = None
     config.max_steps = 1000
@@ -79,6 +79,22 @@ def model_configs():
         'fp_features_num': 128, 
     }
 
+
+    ### Load Quantized Weight After Quik
+    config.loading_quik_quant_weight = {
+        'load_weight': True,
+        'path_to_quant_params': '/home/LLM_compression/QUIK/weights/llama7b_3bit_128fp_quant_scales/quant_params.pt',
+        'learnable_scale': False
+    }
+
+    ### SymQuant
+    config.SymQuant = {
+        'is_quant_weight': False,
+        'block_size': 128,
+        'learnable_scale': False,
+        'layer_bits': {'q': 3, 'k': 3, 'v': 3, 'o': 3, 'down': 3, 'gate': 3, 'up': 3}
+    }
+
     ### QuantizedLinear
     config.QuantizedLinear = {
         'replace': True,
@@ -87,15 +103,24 @@ def model_configs():
 
     ### NoiseQuant
     config.NoiseQuant = {
-        'add_quant_noise': True,
+        'add_quant_noise': False,
         'predict': False,
         'block_size': 128,
-        'compute_scale': True,
+        'compute_scale': False,
         'layer_bits': {'q': 4, 'k': 4, 'v': 4, 'o': 4, 'down': 4, 'gate': 4, 'up': 4}
     }
 
+    ### BitNoiseQuant
+    config.BitNoiseQuant = {
+        'add_quant_noise': True,
+        'predict': False,
+        'block_size': 0,
+        'compute_scale': True,
+        'layer_bits': {'q': 2, 'k': 2, 'v': 2, 'o': 2, 'down': 2, 'gate': 2, 'up': 2}
+    }
+
     ### NORM TWEEKING ###
-    config.norm_tweek = False
+    config.norm_tweek = True
 
     ###LM HEAD ###
     config.train_lm_head = False

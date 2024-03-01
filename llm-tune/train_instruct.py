@@ -41,7 +41,7 @@ from peft import (
 
 
 
-from quant_utils import prepare_llama_quant
+from quant_utils import get_fp_llama, make_layer_bits, prepare_llama_quant
 
 IGNORE_INDEX = -100
 
@@ -169,6 +169,12 @@ class DataTrainingArguments:
             "help": "The percentage of the dataset used for computation"
         },  
     )
+    seed: Optional[int] = field(
+        default=11,
+        metadata={
+            "help": "Seed for splitting data on train and validation parts"
+        },
+    )
     validation_split_percentage: Optional[int] = field(
         default=5,
         metadata={
@@ -295,10 +301,10 @@ def load_hf_datasets(
             )
         
         if data_args.dataset_percentage < 100:
-            dataset_frac = data_args.dataset_percentage/100
-            dataset_parts = raw_datasets['train'].train_test_split(train_size=dataset_frac)
+            dataset_frac = data_args.dataset_percentage / 100
+            dataset_parts = raw_datasets['train'].train_test_split(train_size=dataset_frac, seed=data_args.seed)
             raw_datasets['train'] = dataset_parts['train']
-            dataset_parts = raw_datasets['validation'].train_test_split(test_size=dataset_frac)
+            dataset_parts = raw_datasets['validation'].train_test_split(test_size=dataset_frac, seed=data_args.seed)
             raw_datasets['validation'] = dataset_parts['test']
 
         return raw_datasets
@@ -333,6 +339,7 @@ def run_train(
         validation_split_percentage = config['data']['validation_split_percentage'],
         max_seq_length = config['data']['max_seq_length'],
         dataset_percentage = config['data']['dataset_percentage'],
+        seed = config['data']['seed'],
         trust_remote_code = config['data']['trust_remote_code'],
         preprocessing_num_workers = config['data']['preprocessing_num_workers']
     )
@@ -423,15 +430,21 @@ def run_train(
 
     if config['QuantizedLinear']['replace']:
         outliers_config= config['outliers']
-        outlier_ids, layer_bit = prepare_llama_quant(
+        outlier_ids = get_fp_llama(
             outliers_config['path_to_act_scales'], 
             outliers_config['fp_features_num']
         )
-
         model.replace_Linear(
             outlier_ids=outlier_ids,
             training_mode=config['QuantizedLinear']['training_mode'] 
         )
+    
+    if config['loading_quik_quant_weight']['load_weight']:
+        path_to_params = config['loading_quik_quant_weight']['path_to_quant_params']
+        learnable_scale = config['loading_quik_quant_weight']['learnable_scale']
+        quant_params = torch.load(path_to_params)
+
+        model.add_quant_weight(quant_params, learnable_scale)
 
     if config['NoiseQuant']['add_quant_noise']:
         noise_config = config['NoiseQuant']
@@ -582,7 +595,7 @@ def run_train(
     else:
         train_result = trainer.train()
 
-    trainer.save_model()  # Saves the tokenizer too for easy upload
+    # trainer.save_model()  # Saves the tokenizer too for easy upload
 
 
 def main():
