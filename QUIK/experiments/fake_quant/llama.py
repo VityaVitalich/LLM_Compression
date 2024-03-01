@@ -248,9 +248,9 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                     save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = None
 
                 save_dict['model.layers.%d.%s' % (i, name)]['alpha'] = modules_quik[name].quantizer.alpha.to("cpu")
-                # save_dict['model.layers.%d.%s' % (i, name)]['alpha_pq'] = modules_quik[name].quantizer.alpha_pq.to("cpu")
-                save_dict['model.layers.%d.%s' % (i, name)]['bit'] = torch.tensor(modules_quik[name].quantizer.bits)
-                save_dict['model.layers.%d.%s' % (i, name)]['sym'] = torch.tensor(modules_quik[name].quantizer.sym)
+                save_dict['model.layers.%d.%s' % (i, name)]['alpha_pq'] = modules_quik[name].quantizer.alpha_pq.to("cpu")
+                save_dict['model.layers.%d.%s' % (i, name)]['bit'] = torch.tensor(modules_quik[name].quantizer.bits).to("cpu")
+                save_dict['model.layers.%d.%s' % (i, name)]['maxq'] = torch.tensor(modules_quik[name].quantizer.maxq).to("cpu")
                 
                 modules_quik[name].free()
 
@@ -403,7 +403,7 @@ if __name__ == '__main__':
     save_path = args.path_to_save_quant_model
     # torch.save(model, save_path)
     model.save_pretrained(save_path)
-    torch.save(save_dict, f"{save_path}/quantazed_model.pt")
+    torch.save(save_dict, f"{save_path}/quant_params.pt")
 
     datasets = ['wikitext2']
     for dataset in datasets:

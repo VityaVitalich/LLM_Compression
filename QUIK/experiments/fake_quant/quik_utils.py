@@ -137,8 +137,8 @@ class QUIK:
 
         torch.cuda.synchronize()
 
-        # self.quantizer.post_quant_find_params(self.layer.weight.data[:, self.int_indices], 
-        #                                       q_int[:, :(self.columns - self.fp_features)])
+        self.quantizer.post_quant_find_params(self.layer.weight.data[:, self.int_indices], 
+                                              q_int[:, :(self.columns - self.fp_features)])
 
         self.layer.weight.data = Q.reshape(self.layer.weight.shape).to(self.layer.weight.data.dtype)
         self.quant_weight = q_int.reshape(self.layer.weight.shape).to(self.layer.weight.data.dtype)

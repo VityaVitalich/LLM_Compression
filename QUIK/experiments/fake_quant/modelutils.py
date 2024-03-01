@@ -53,7 +53,8 @@ def get_llama(model, hf_token):
     torch.nn.init.kaiming_uniform_ = skip
     torch.nn.init.uniform_ = skip
     torch.nn.init.normal_ = skip
-    model = transformers.LlamaForCausalLM.from_pretrained(model, torch_dtype='auto', 
+    model = transformers.LlamaForCausalLM.from_pretrained(model,
+                                                          torch_dtype=torch.bfloat16,
                                                           use_auth_token=hf_token,
                                                           low_cpu_mem_usage=True)
     model.seqlen = 2048
