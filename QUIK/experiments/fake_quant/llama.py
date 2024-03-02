@@ -250,7 +250,7 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 save_dict['model.layers.%d.%s' % (i, name)]['alpha'] = modules_quik[name].quantizer.alpha.to("cpu")
                 save_dict['model.layers.%d.%s' % (i, name)]['alpha_pq'] = modules_quik[name].quantizer.alpha_pq.to("cpu")
                 save_dict['model.layers.%d.%s' % (i, name)]['bit'] = torch.tensor(modules_quik[name].quantizer.bits).to("cpu")
-                save_dict['model.layers.%d.%s' % (i, name)]['maxq'] = torch.tensor(modules_quik[name].quantizer.maxq).to("cpu")
+                save_dict['model.layers.%d.%s' % (i, name)]['maxq'] = modules_quik[name].quantizer.maxq.to("cpu")
                 
                 modules_quik[name].free()
 
