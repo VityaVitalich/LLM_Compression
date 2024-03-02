@@ -303,6 +303,13 @@ class SymQuant(nn.Module):
         return scale
 
     def dequantize(self, int_weight):
+        device = int_weight.device
+
+        if self.alpha_scale.device != device:
+            self.alpha_scale = self.alpha_scale.to(device)
+        if self.bit.device != device:
+            self.bit = self.bit.to(device)
+
         scale = self.get_scale()
         w_dq = scale * int_weight
         return w_dq
@@ -869,7 +876,6 @@ class QuantizedLinear(nn.Linear):
 
                 if self.is_quant_weight:
                     w_dq = self.quantizer(int_weight)
-                    w_dq = w_dq.to(fp_weight.dtype)
                     
                     w_out = torch.hstack([w_dq, fp_weight])
                     w_out = w_out[:, self.inv_col_perm]
