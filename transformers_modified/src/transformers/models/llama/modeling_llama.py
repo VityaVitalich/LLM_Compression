@@ -307,8 +307,6 @@ class SymQuant(nn.Module):
 
         if self.alpha_scale.device != device:
             self.alpha_scale = self.alpha_scale.to(device)
-        if self.bit.device != device:
-            self.bit = self.bit.to(device)
 
         scale = self.get_scale()
         w_dq = scale * int_weight
