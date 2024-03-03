@@ -23,8 +23,8 @@ from datasets import load_dataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
-import sys 
-sys.path.append("/home/LLM_compression/transformers_modified/src")
+# import sys 
+# sys.path.append("/home/LLM_compression/transformers_modified/src")
 
 import transformers
 from transformers import (
