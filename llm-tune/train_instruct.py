@@ -23,6 +23,9 @@ from datasets import load_dataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+import sys 
+sys.path.append("/home/LLM_compression/transformers_modified/src")
+
 import transformers
 from transformers import (
     AutoModelForCausalLM,
@@ -567,6 +570,16 @@ def run_train(
             name = name.replace('.weight', '')
             if name == 'lm_head':
                 param.requires_grad_()
+
+    for name, param in model.named_parameters():
+        param.requires_grad = False
+
+    for name, param in model.named_parameters():
+        name = name.replace('.weight', '')
+        if name.find('model.layers.0.self_attn.q_proj') != -1:
+        # if name.find('model.layers.0.mlp.up_proj') != -1:
+            print(name)
+            param.requires_grad_()
 
     trainable_params = 0
     all_param = 0
