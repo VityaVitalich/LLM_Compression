@@ -300,7 +300,6 @@ class SymQuant(nn.Module):
     def get_scale(self):
         qmax = 2 ** (self.bit - 1) - 1
         scale = self.alpha_scale / qmax
-        print(f"self.alpha_scale: {self.alpha_scale.device}")
         return scale
 
     def dequantize(self, int_weight):
