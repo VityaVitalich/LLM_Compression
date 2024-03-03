@@ -304,11 +304,6 @@ class SymQuant(nn.Module):
         return scale
 
     def dequantize(self, int_weight):
-        device = int_weight.device
-
-        if self.alpha_scale.device != device:
-            self.alpha_scale = self.alpha_scale.to(device)
-
         scale = self.get_scale()
         w_dq = scale * int_weight
         return w_dq
@@ -789,10 +784,11 @@ class QuantizedLinear(nn.Linear):
         alpha_scale
     ):  
         wdtype = self.weight.data.dtype
+        wdevice = self.weight.data.device
         self.is_quant_weight = True
-        self.weight.data = quant_weight.to(wdtype)
-        self.weight.data[:, ~self.mask] = fp_weight.to(wdtype)
-        self.quantizer.alpha_scale.data = alpha_scale.to(wdtype)
+        self.weight.data = quant_weight.to(device=wdevice, dtype=wdtype)
+        self.weight.data[:, ~self.mask] = fp_weight.to(device=wdevice, dtype=wdtype)
+        self.quantizer.alpha_scale.data = alpha_scale.to(device=wdevice, dtype=wdtype)
 
     def add_quant_noise_to_weight(
         self, 
@@ -873,17 +869,10 @@ class QuantizedLinear(nn.Linear):
                 int_weight = self.weight[:, self.mask].detach()
                 fp_weight = self.weight[:, ~self.mask]
 
-                print(f"int_weight: {int_weight.device}")
-                print(f"fp_weight: {fp_weight.device}")
-
                 if self.is_quant_weight:
-                    w_dq = self.quantizer(int_weight)
-                    
-                    w_out = torch.hstack([w_dq, fp_weight])
-                    
+                    w_dq = self.quantizer(int_weight)      
+                    w_out = torch.hstack([w_dq, fp_weight]) 
                     w_out = w_out[:, self.inv_col_perm]
-                    print(f"w_out: {w_out.device}")
-                    print(f"input: {input.device}")
 
                     return F.linear(input, w_out, self.bias)
 
