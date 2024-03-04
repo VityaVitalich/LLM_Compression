@@ -160,6 +160,10 @@ class DataTrainingArguments:
         default=42,
     )
 
+    load_from_disk: bool = field(
+        default=False
+    )
+
 
 @torch.no_grad()
 def create_mask(weight, outlier_fraction):
@@ -353,7 +357,6 @@ def run_train(
             data_collator = DataCollatorWithMaskForCausalLM(tokenizer=tokenizer)
     else:
         lm_datasets = raw_datasets
-        print(lm_datasets)
         data_collator = DistillDataCollatorWithMaskForCausalLM(tokenizer=tokenizer)
 
     if config.norm_tweek:
@@ -442,7 +445,8 @@ def main():
         validation_split_percentage=config.data.valid_split,
         block_size=config.data.block_size,
         dataset_percentage=config.data.dataset_percentage,
-        seed=config.seed
+        seed=config.seed,
+        load_from_disk=config.distillation
     )
 
     model_args = ModelArguments(

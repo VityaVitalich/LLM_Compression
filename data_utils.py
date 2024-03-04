@@ -8,12 +8,16 @@ def load_hf_datasets(data_args):
     # Load the dataset
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        print(data_args.dataset_name, data_args.dataset_config_name)
-        raw_datasets = load_dataset(#load_from_disk(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
-            streaming=data_args.streaming,
-        )
+        if data_args.load_from_disk:
+            raw_datasets = load_from_disk(
+                data_args.dataset_name
+            )
+        else:
+            raw_datasets = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                streaming=data_args.streaming,
+            )
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 data_args.dataset_name,

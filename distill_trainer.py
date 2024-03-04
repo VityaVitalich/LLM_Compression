@@ -13,7 +13,6 @@ class DistillTrainer(Trainer):
     def __init__(self, model, temperature=None, lambda_param=None,  *args, **kwargs):
         super().__init__(model=model, *args, **kwargs)
         self.loss_function = nn.KLDivLoss(reduction="batchmean")
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.temperature = temperature
         self.lambda_param = lambda_param
         
@@ -63,6 +62,36 @@ class DistillTrainer(Trainer):
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             student_target_loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
 
+        self.state.distill_loss = distillation_loss.detach().cpu().item()
+        self.state.CE_loss = student_target_loss.detach().cpu().item()
         # Calculate final loss
         loss = (1. - self.lambda_param) * student_target_loss + self.lambda_param * distillation_loss
         return (loss, outputs) if return_outputs else loss
+
+    def log(self, logs) -> None:
+        """
+        Log `logs` on the various objects watching training.
+
+        Subclass and override this method to inject custom behavior.
+
+        Args:
+            logs (`Dict[str, float]`):
+                The values to log.
+        """
+        if self.state.epoch is not None:
+            logs["epoch"] = round(self.state.epoch, 2)
+        if self.args.include_num_input_tokens_seen:
+            logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
+
+        #print(self.state)
+        if (self.state.global_step % self.state.eval_steps) == 0:
+            #print(self.state.global_step, self.state.logging_steps, (self.state.global_step % self.state.logging_steps) == 0)
+            prefix = 'eval_'
+        else:
+            prefix = 'train_'
+        logs[f'{prefix}distill_loss'] = self.state.distill_loss
+        logs[f'{prefix}CE_loss'] = self.state.CE_loss
+
+        output = {**logs, **{"step": self.state.global_step}}
+        self.state.log_history.append(output)
+        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
