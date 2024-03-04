@@ -313,7 +313,6 @@ class LsqQuan(nn.Module):
 
         device = x_quantize.device
         s_scale = grad_scale(self.s, s_grad_scale).to(device)
-        s_scale += 1e-12
  
         assert not torch.isnan(x_quantize).any(), "before frac scale"
         x_quantize = x_quantize / (s_scale)
@@ -332,12 +331,8 @@ class LsqQuan(nn.Module):
 
 class QuatizedLinear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        if self.training:
-            quantized_weight = self.quantizer(self.weight)
-            self.weight.data = quantized_weight
-            return F.linear(input, quantized_weight, self.bias)
-        else:
-            return F.linear(input, self.weight, self.bias)
+        quantized_weight = self.quantizer(self.weight)
+        return F.linear(input, quantized_weight, self.bias)
 
     def __init__(self, linear, learnable_scales=False, bit=4, outlier_ids=[0], quik_scales=None):
         super().__init__(
