@@ -19,7 +19,7 @@ class DataCollatorWithMaskForCausalLM(object):
             input_ids.append(torch.tensor(item_dict["input_ids"]))
             attention_masks.append(torch.tensor(item_dict["attention_mask"]))
             label = torch.tensor(item_dict["labels"])
-            label[:-1] = IGNORE_INDEX
+            #label[:-1] = IGNORE_INDEX
             labels.append(label)
 
         input_ids = torch.vstack(input_ids)
@@ -48,7 +48,7 @@ class DistillDataCollatorWithMaskForCausalLM(object):
             input_ids.append(torch.tensor(item_dict["input_ids"]))
             attention_masks.append(torch.tensor(item_dict["attention_mask"]))
             label = torch.tensor(item_dict["labels"])
-            label[:-1] = IGNORE_INDEX
+            #label[:-1] = IGNORE_INDEX
             labels.append(label)
             logits.append(torch.tensor(item_dict['logits']).unsqueeze(0))
 
