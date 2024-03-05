@@ -60,7 +60,46 @@ class DistillDataCollatorWithMaskForCausalLM(object):
         data_dict = {
             'input_ids': input_ids,
             'attention_mask': attention_masks,
-            'teacher_logits': logits
+            'logits': logits
+        }
+        if labels is not None:
+            data_dict['labels'] = labels
+        return data_dict
+
+@dataclass
+class DistillDataCollatorSeq2Seq(object):
+    tokenizer: transformers.PreTrainedTokenizer
+
+    def __call__(self, batch):
+        input_ids = []
+        labels = []
+        attention_masks = []
+        logits = []
+
+        for item_dict in batch:
+            input_ids.append(torch.tensor(item_dict["input_ids"]))
+            attention_masks.append(torch.tensor(item_dict["attention_mask"]))
+            label = torch.tensor(item_dict["labels"])
+            labels.append(label)
+            logits.append(torch.tensor(item_dict['logits']))
+
+        input_ids = torch.nn.utils.rnn.pad_sequence(
+            input_ids, batch_first=True, padding_value=tokenizer.pad_token_id
+        )
+        attention_masks =torch.nn.utils.rnn.pad_sequence(
+            attention_masks, batch_first=True, padding_value=0
+        )
+        labels =torch.nn.utils.rnn.pad_sequence(
+            labels, batch_first=True, padding_value=-100
+        )
+        logits =torch.nn.utils.rnn.pad_sequence(
+            logits, batch_first=True, padding_value=0
+        )
+            
+        data_dict = {
+            'input_ids': input_ids,
+            'attention_mask': attention_masks,
+            'logits': logits
         }
         if labels is not None:
             data_dict['labels'] = labels

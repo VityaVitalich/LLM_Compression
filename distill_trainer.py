@@ -26,14 +26,15 @@ class DistillTrainer(Trainer):
             labels = inputs.pop("labels")
         else:
             labels = None
-
-        logits = inputs.pop("teacher_logits")
+        
+        label_mask = inputs["labels"] != -100
+        logits = inputs.pop("logits")
 
         outputs = model(**inputs)
 
         #https://huggingface.co/docs/transformers/tasks/knowledge_distillation_for_image_classification
-        soft_teacher = F.softmax(logits / self.temperature, dim=-1)
-        soft_student = F.log_softmax(outputs.logits / self.temperature, dim=-1)
+        soft_teacher = F.softmax(logits[label_mask] / self.temperature, dim=-1)
+        soft_student = F.log_softmax(outputs.logits[label_mask] / self.temperature, dim=-1)
 
         # Compute the loss
         distillation_loss = self.loss_function(soft_student, soft_teacher) * (self.temperature ** 2)

@@ -14,6 +14,7 @@ from ste_utils import prepare_llama_ste, prepare_scales_quik
 from collators import (
     DataCollatorWithMaskForCausalLM,
     DistillDataCollatorWithMaskForCausalLM,
+    DistillDataCollatorSeq2Seq
 )
 from distill_trainer import DistillTrainer
 from data_utils import (
@@ -357,7 +358,10 @@ def run_train(
             data_collator = DataCollatorWithMaskForCausalLM(tokenizer=tokenizer)
     else:
         lm_datasets = raw_datasets
-        data_collator = DistillDataCollatorWithMaskForCausalLM(tokenizer=tokenizer)
+        if config.data.instruct:
+            data_collator = DistillDataCollatorWithMaskForCausalLM(tokenizer=tokenizer)
+        else:
+            data_collator = DistillDataCollatorSeq2Seq(tokenizer)
 
     if config.norm_tweek:
         layernorm_names = [
