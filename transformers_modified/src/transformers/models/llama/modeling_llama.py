@@ -772,7 +772,9 @@ class QuantizedLinear(nn.Linear):
             mask=self.mask     
         )
 
-        if not learnable_scale:
+        if learnable_scale:
+            self.quantizer.alpha_scale.requires_grad = True
+        else:
             self.quantizer.alpha_scale.requires_grad = False
         
 
