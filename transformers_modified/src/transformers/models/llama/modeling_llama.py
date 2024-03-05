@@ -292,14 +292,14 @@ class LsqQuan(nn.Module):
         xmax[tmp] = +1
         
         alpha = xmax
-        scale = xmax / torch.tensor(self.bit)
+        scale = xmax / torch.tensor(self.thd_pos)
 
         self.s = nn.Parameter(scale.unsqueeze(1))
 
     def init_from_quik(self, x, alpha):
         self.mask = torch.ones(x.size(1), dtype=torch.bool)
         self.mask[self.outlier_ids] = False
-        self.s = nn.Parameter((alpha / torch.tensor(self.bit)).type(x.dtype))
+        self.s = nn.Parameter((alpha / torch.tensor(self.thd_pos)).type(x.dtype))
 
     def forward(self, x):
         if self.bit >= 32:
