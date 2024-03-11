@@ -93,7 +93,7 @@ def model_configs():
 
     ### Load Quantized Weight After Quik
     config.loading_quik_quant_weight = {
-        'load_weight': True,
+        'load_weight': False,
         'path_to_quant_params': '/home/LLM_compression/QUIK/weights/llama7b_3bit_128fp_quant_scales/quant_params.pt',
         'learnable_scale': False
     }
@@ -101,7 +101,6 @@ def model_configs():
     ### SymQuant
     config.SymQuant = {
         'is_quant_weight': False,
-        'block_size': 128,
         'learnable_scale': False,
         'layer_bits': {'q': 3, 'k': 3, 'v': 3, 'o': 3, 'down': 3, 'gate': 3, 'up': 3}
     }
@@ -117,10 +116,10 @@ def model_configs():
 
     ### BitNoiseQuant
     config.BitNoiseQuant = {
-        'add_quant_noise': False,
+        'add_quant_noise': True,
         'predict': False,
-        'block_size': 128,
-        'compute_scale': False,
+        'compute_scale': True,
+        'learnable_scale': False,
         'layer_bits': {'q': 2, 'k': 2, 'v': 2, 'o': 2, 'down': 2, 'gate': 2, 'up': 2}
     }
 

@@ -474,10 +474,9 @@ def run_train(
             **noise_config['layer_bits']
         )
         model.add_quant_bitnoise_to_weight( 
-            layer_bit=layer_bit, 
-            block_size=noise_config['block_size'],
-            fp_cols_num=outliers_config['fp_features_num'],
-            compute_scale=noise_config['compute_scale'], 
+            layer_bit=layer_bit,
+            compute_scale=noise_config['compute_scale'],
+            learnable_scale=noise_config['learnable_scale'],
             quant_noise_predict=noise_config['predict']
         )
 

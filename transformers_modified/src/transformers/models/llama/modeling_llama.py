@@ -130,154 +130,6 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None, dropout_p=0.
     attn_weight = torch.dropout(attn_weight, dropout_p, train=True)
     return attn_weight @ value
 
-
-def round_pass(x):
-    y = x.round()
-    y_grad = x
-    return (y - y_grad).detach() + y_grad
-
-
-def grad_scale(x, scale):
-    y = x
-    y_grad = x * scale
-    return (y - y_grad).detach() + y_grad
-
-
-def quantize(
-    X: torch.Tensor = None,
-    B: int = 16,
-    ) -> torch.Tensor:
-
-    thd_neg = -(2 ** (B - 1)) + 1
-    thd_pos = 2 ** (B - 1) - 1
-
-
-    scale = (X.max() - X.min())/(thd_neg - thd_pos)
-    X = round_pass(X/scale)
-    X = torch.clip(X, thd_neg, thd_pos)
-    return scale*X
-
-@torch.jit.script
-def quantize_over_blocks(
-    X: torch.Tensor,
-    B: int = 16,
-    block_size: int = 4,  # Assuming block size along the first dimension
-) -> torch.Tensor:
-    # Dimensions for the input tensor
-    D = X.shape[1]
-
-    # Quantization thresholds
-    thd_neg = -(2 ** (B - 1)) + 1
-    thd_pos = 2 ** (B - 1) - 1
-    # Initialize an output tensor
-    X_quantized = torch.zeros_like(X)
-    
-    # Calculate number of blocks
-    num_blocks = (D + block_size - 1) // block_size  # Account for the last block that might be smaller
-    
-    for i in range(num_blocks):
-        # Extract the block
-        start_idx = i * block_size
-        end_idx = min((i + 1) * block_size, D)
-        block = X[:,start_idx:end_idx]
-        
-        # Scale for the current block
-        scale = (block.max() - block.min()) / (thd_pos - thd_neg)
-        block = round_pass(block / scale)
-        block = torch.clip(block, thd_neg, thd_pos)
-        
-        # Store the quantized block back into the tensor
-        X_quantized[:,start_idx:end_idx] = scale * block
-    
-    return X_quantized
-
-def quantize_with_outliers(X: torch.Tensor,
-    B: int = 16,
-    block_size: int = 4,
-    idx: torch.Tensor = torch.tensor([])):
-
-    if len(idx) == 0:
-        print('Empty outlier idx')
-        return quantize_over_blocks(X, B=B, block_size=block_size)
-    
-    mask = torch.ones(X.size(1), dtype=torch.bool)
-    mask[idx] = False
-
-    # Split the tensor into quantize and no_quantize parts
-    X_quantize = X[:, mask]
-    X_no_quantize = X[:, ~mask]
-
-    # Quantize the part that needs quantization
-    X_quantized = quantize_over_blocks(X_quantize, B=B, block_size=block_size)
-
-    # # Prepare a tensor to hold the result
-    # X_result = torch.empty_like(X)
-
-    # Place the quantized and unquantized parts back in their original positions
-    X[:, mask] = X_quantized
-    X[:, ~mask] = X_no_quantize
-
-    return X
-
-
-class LsqQuant(nn.Module):
-    def __init__(
-        self, bit, all_positive=False, symmetric=False, per_channel=True, outlier_ids=[]
-    ):
-        super(LsqQuant, self).__init__()
-        self.bit = bit
-        self.outlier_ids = outlier_ids
-
-
-        if all_positive:
-            assert not symmetric, "Positive quantization cannot be symmetric"
-            # unsigned activation is quantized to [0, 2^b-1]
-            self.thd_neg = 0
-            self.thd_pos = 2**bit - 1
-        else:
-            if symmetric:
-                # signed weight/activation is quantized to [-2^(b-1)+1, 2^(b-1)-1]
-                self.thd_neg = -(2 ** (bit - 1)) + 1
-                self.thd_pos = 2 ** (bit - 1) - 1
-            else:
-                # signed weight/activation is quantized to [-2^(b-1), 2^(b-1)-1]
-                self.thd_neg = -(2 ** (bit - 1))
-                self.thd_pos = 2 ** (bit - 1) - 1
-
-        self.per_channel = per_channel
-        self.s = nn.Parameter(torch.ones(1))
-
-    def init_from(self, x, *args, **kwargs):
-        self.mask = torch.ones(x.size(1), dtype=torch.bool)
-        self.mask[self.outlier_ids] = False
-        x_quantize = x[:, self.mask]
-
-        self.s = nn.Parameter(
-                x_quantize.detach().abs().mean(dim=0) * 2 / (self.thd_pos**0.5)
-        )
-
-    def forward(self, x):
-        if self.bit >= 32:
-            return x
-
-
-        x_result = torch.empty_like(x)        
-        x_quantize = x[:, self.mask]
-
-        s_grad_scale = 1.0 / ((self.thd_pos * x.numel()) ** 0.5)
-        
-        device = x_quantize.device
-        s_scale = grad_scale(self.s, s_grad_scale).to(device)
-        x_quantize = x_quantize / (s_scale)
-        x_quantize = torch.clamp(x_quantize, self.thd_neg, self.thd_pos)
-        x_quantize = round_pass(x_quantize)
-        x_quantize = x_quantize * (s_scale)
-
-        #assert (x_quantize == x[:, self.mask]).all()
-        x_result[:, self.mask] = x_quantize
-        x_result[:, ~self.mask] = x[:, ~self.mask]
-        return x_result
-
 class SymQuant(nn.Module):
     def __init__(
         self,
@@ -440,61 +292,35 @@ class NoiseQuant(nn.Module):
 class BitNoiseQuant(nn.Module):
     def __init__(
         self,
-        weight_shape,
-        bit,
-        block_size,
-        quant_cols_num,
-        mask
+        out_features,
+        bit
     )-> None:
 
         super(BitNoiseQuant, self).__init__()
-        self.weight_shape = weight_shape
+        self.out_features = out_features
 
         self.bit = torch.tensor(bit)
-        self.block_size = block_size
-        self.quant_cols_num = quant_cols_num
-        self.mask = mask
 
-        # alpha = torch.ones((weight_shape[0], self.quant_cols_num))
-
-        alpha = torch.ones((self.weight_shape[0] * self.quant_cols_num, 1))
-        self.alpha = nn.Parameter(alpha)
+        alpha = torch.ones((out_features, 1))
+        self.alpha_scale = nn.Parameter(alpha)
         # self.register_buffer('alpha', alpha)
 
-    def compute_alpha_scale(self, weight) -> None:
-        assert self.weight_shape == weight.shape, 'Shape of input weight is incompatible!'
-
-        w = weight.data
-        device = weight.device
-        block_size = self.block_size
-        quant_cols_num = self.quant_cols_num
-        alpha = self.alpha
+    def compute_alpha_scale(self, quant_weight) -> None:
+        w = quant_weight.data
+        device = quant_weight.device
+        alpha = self.alpha_scale
         bit = self.bit
-        mask = self.mask
 
         if alpha.device != device:
             alpha = alpha.to(device)
         if bit.device != device:
             bit = bit.to(device)
-        if mask.device != device:
-            mask = mask.to(device)
 
-        if mask is not None:
-            w_re = w[:, mask]
-        else:
-            w_re = w
-
-        out_features = w_re.shape[0]
-        in_features = w_re.shape[1]
-
-        if block_size > 0:
-            # w_re = w_re.reshape((out_features * block_size, in_features // block_size))
-            w_re = w_re.reshape((out_features * quant_cols_num, block_size))
-
+        out_features = w.shape[0]
         
-        alpha = self._get_row_scale(w_re, bit)
+        alpha = self._get_row_scale(w, bit)
         alpha = alpha.to(w.dtype)
-        self.alpha.data = alpha.reshape((out_features * quant_cols_num, 1))
+        self.alpha_scale.data = alpha.reshape((out_features, 1))
 
     def _get_row_scale(self, w, bit, maxshrink=0.8, grid=100, norm=2):
         qmax = 2 ** (bit.detach() - 1) - 1
@@ -558,109 +384,64 @@ class BitNoiseQuant(nn.Module):
         # bit += (torch.rand_like(bit) - 0.5)
         # bit = bit.round() + (bit - bit.detach())
 
-        alpha = F.softplus(alpha, beta=10**(6), threshold=1) 
-        lsq = self._lsq_forward(w, bit.round(), alpha)
+        device = w.device
+        dtype = w.dtype
+
+        # alpha = F.softplus(alpha, beta=10**(6), threshold=1) 
+        # lsq = self._lsq_forward(w, bit.round(), alpha)
 
         c1 = w >= alpha
         c2 = w <= -alpha     
         delta = alpha / (2**(bit - 1) - 1)
 
         with torch.no_grad():                
-            diff = (lsq - w) / delta #difference between dequantized and original weights after their scale
-            sel = diff[torch.logical_not(torch.logical_or(c1, c2))] #take weights less than alpha
-            hist = torch.histc(sel.float(), bins=N_BIN, min=-0.5, max=0.5)    
+            # diff = (lsq - w) / delta #difference between dequantized and original weights after their scale
+            # sel = diff[torch.logical_not(torch.logical_or(c1, c2))] #take weights less than alpha
+            # hist = torch.histc(sel.float(), bins=N_BIN, min=-0.5, max=0.5)    
             
-            noise = torch.multinomial(hist, w.numel(), True) + torch.rand_like(w.view(-1))               
-            noise = (noise / N_BIN - 0.5).view(w.shape)
-            noise = noise.to(w.dtype)
+            # noise = torch.multinomial(hist, w.numel(), True) + torch.rand_like(w.view(-1))               
+            # noise = (noise / N_BIN - 0.5).view(w.shape)
+            # noise = noise.to(w.dtype)
+            noise = torch.randn_like(w, requires_grad=False) / 2
 
         w_rand = noise * delta
-        w_cliped = torch.where(c2, -alpha, w + w_rand)
-        w_cliped = torch.where(c1, alpha, w_cliped)
+        # w_rand = w_rand.to(device=device, dtype=dtype)
+        w_clipped = torch.where(c2, -alpha, w + w_rand)
+        w_clipped = torch.where(c1, alpha, w_clipped)
         
-        return w_cliped
+        return w_clipped
 
+    def quant_noise(self, quant_weight) -> torch.tensor:
 
-    def quant_noise(self, weight):
-        assert self.weight_shape == weight.shape, 'Shape of input weight is incompatible!'
-
-        w = weight
-        device = weight.device
-        block_size = self.block_size
-        quant_cols_num = self.quant_cols_num
-        alpha = self.alpha
+        w = quant_weight
+        device = quant_weight.device
+        alpha = self.alpha_scale
         bit = self.bit
-        mask = self.mask
 
         if alpha.device != device:
             alpha = alpha.to(device)
         if bit.device != device:
             bit = bit.to(device)
-        if mask.device != device:
-            mask = mask.to(device)
 
-        if mask is not None:
-            w_re = w[:, mask]
-        else:
-            w_re = w
+        w_clipped = self._compute_quant_noise(w, bit, alpha)
 
-        out_features = w_re.shape[0]
-        in_features = w_re.shape[1]
+        return w_clipped
 
-        if block_size > 0:
-            out_features = w_re.shape[0]
-            in_features = w_re.shape[1]
-            # w_re = w_re.reshape((out_features * block_size, in_features // block_size))
-            w_re = w_re.reshape((out_features * quant_cols_num, block_size))
+    def quantize_weight(self, quant_weight):
 
-        w_cliped = self._compute_quant_noise(w_re, bit, alpha)
-
-        if mask is not None:
-            w_out = torch.zeros(w.shape, dtype=w.dtype, device=w.device)
-            w_out[:, mask] = w_cliped.reshape((out_features, in_features))
-            w_out[:, ~mask] = w[:, ~mask]
-        else:
-            w_out = w_cliped
-
-        return w_out
-
-    def quantize_weight(self, weight):
-        assert self.weight_shape == weight.shape, 'Shape of input weight is incompatible!'
-
-        w = weight
-        device = weight.device
-        block_size = self.block_size
-        quant_cols_num = self.quant_cols_num
-        alpha = self.alpha
+        w = quant_weight
+        device = quant_weight.device
+        alpha = self.alpha_scale
         bit = self.bit
-        mask = self.mask
+
 
         if alpha.device != device:
             alpha = alpha.to(device)
         if bit.device != device:
             bit = bit.to(device)
-        if mask.device != device:
-            mask = mask.to(device)
 
-        if mask is not None:
-            w_re = w[:, mask]
-        else:
-            w_re = w
-
-        out_features = w_re.shape[0]
-        in_features = w_re.shape[1]
-        if block_size > 0:
-            # w_re = w_re.reshape((out_features * block_size, in_features // block_size))
-            w_re = w_re.reshape((out_features * quant_cols_num, block_size))
-
-        lsq = self._lsq_forward(w_re, bit.round(), alpha)
-
-        if mask is not None:
-            q_out = torch.zeros(w.shape, dtype=w.dtype, device=w.device)
-            q_out[:, mask] = lsq.reshape((out_features, in_features))
-            q_out[:, ~mask] = w[:, ~mask]
-        else:
-            q_out = lsq
+        lsq = self._lsq_forward(w, bit.round(), alpha)
+        q_out = lsq
 
         return q_out
 
@@ -691,6 +472,9 @@ class QuantizedLinear(nn.Module):
         self.is_quant_weight = is_quant_weight
         self.training_mode = None
         self.quantizer = None
+        self.add_quant_bitnoise = None
+        self.add_quant_bitnoise_predict = None
+
 
         if self.outlier_cols_num == 0:
             weight = torch.rand((self.out_features, self.in_features), 
@@ -855,6 +639,29 @@ class QuantizedLinear(nn.Module):
         self.quantizer.alpha_scale.data = alpha_scale.to(dtype=self.dtype, 
                                                          device=self.device)
 
+    def add_quant_bitnoise_to_weight(
+        self, 
+        bit,
+        compute_quant_scale,
+        add_quant_noise_predict
+    ):
+        
+        self.add_quant_bitnoise = True
+        self.add_quant_bitnoise_predict = add_quant_noise_predict
+
+        if self.outlier_cols_num == 0:
+            w = self.weight
+        elif self.outlier_cols_num >= 0:
+            w = self.int_weight
+
+        self.quantizer = BitNoiseQuant(
+            out_features=w.shape[0],
+            bit=bit
+        )
+
+        if compute_quant_scale:
+            self.quantizer.compute_alpha_scale(w)
+
     def forward_with_quant_weight(self, input):
         if self.outlier_cols_num == 0:
             w = self.weight
@@ -883,13 +690,27 @@ class QuantizedLinear(nn.Module):
             return out
 
     def forward_with_fp_weight(self, input):
+        noise_cond1 = (self.add_quant_bitnoise and self.training)
+        noise_cond2 = (self.add_quant_bitnoise_predict and (not self.training))
+        noise_cond = noise_cond1 or noise_cond2
+
         if self.outlier_cols_num == 0:
             w = self.weight
+            if noise_cond:
+                w = self.quantizer(w)
+
             return F.linear(input, w, self.bias)
         
         elif self.outlier_cols_num > 0:
-            out_w = torch.hstack([self.int_weight, 
-                                  self.fp_weight])
+
+            if noise_cond:
+                quant_w_noised = self.quantizer(self.int_weight)
+                out_w = torch.hstack([quant_w_noised, 
+                                      self.fp_weight])               
+            else:
+                out_w = torch.hstack([self.int_weight, 
+                                      self.fp_weight])
+
             out_w = out_w[:, self.inv_col_perm]
 
             return F.linear(input, out_w, self.bias)       
@@ -902,12 +723,6 @@ class QuantizedLinear(nn.Module):
         else:
             out = self.forward_with_fp_weight(input)
             return out
-
-
-        if self.training:
-            pass
-        else:
-            pass
             
         
 # class QuantizedLinear(nn.Linear):
@@ -1879,8 +1694,6 @@ class LlamaDecoderLayer(nn.Module):
         self.symmetric_quantizer_decoder = {
             'add': config.symmetric_quantizer['add'],
             'layer_bit': config.symmetric_quantizer['layer_bit'].get(str(layer_idx)),
-            'block_size': config.symmetric_quantizer['block_size'],
-            'fp_cols_num': config.symmetric_quantizer['fp_cols_num'],
             'learnable_scale': config.symmetric_quantizer['learnable_scale']
         }
         self.weight_quant_noise_decoder = {
@@ -1896,9 +1709,8 @@ class LlamaDecoderLayer(nn.Module):
             'add': config.weight_quant_bitnoise['add'],
             'predict': config.weight_quant_bitnoise['predict'],
             'compute_scale': config.weight_quant_bitnoise['compute_scale'],
-            'layer_bit': config.weight_quant_bitnoise['layer_bit'].get(str(layer_idx)),
-            'block_size': config.weight_quant_bitnoise['block_size'],
-            'fp_cols_num': config.weight_quant_bitnoise['fp_cols_num']
+            'learnable_scale': config.weight_quant_bitnoise['learnable_scale'],
+            'layer_bit': config.weight_quant_bitnoise['layer_bit'].get(str(layer_idx))
         }
 
         if self.QuantizedLinear_decoder['replace']:
@@ -2038,6 +1850,8 @@ class LlamaDecoderLayer(nn.Module):
                     quantized_projection.from_fp_Linear(cur_projection)
 
                 setattr(cur_layer, proj_name, quantized_projection)
+                break
+            break
 
     def add_symmetric_quantizer(self):
         layers = ['self_attn', 'mlp']
@@ -2083,7 +1897,7 @@ class LlamaDecoderLayer(nn.Module):
                     learnable_scale = self.symmetric_quantizer_decoder['learnable_scale']
                     cur_projection.add_symmetric_quantizer(
                         bit=cur_bit, 
-                        learnable_scale=learnable_scale    
+                        learnable_scale=learnable_scale
                     )
                     
                     outlier_ids = params['fp_indices']
@@ -2138,17 +1952,20 @@ class LlamaDecoderLayer(nn.Module):
                     
                     add_noise_to_predict = self.weight_quant_bitnoise_decoder['predict']
                     compute_quant_scale = self.weight_quant_bitnoise_decoder['compute_scale']
+                    learnable_quant_scale = self.weight_quant_bitnoise_decoder['learnable_scale']
                     cur_bit = self.weight_quant_bitnoise_decoder['layer_bit'].get(f'{layer_name}.{proj_name}')
-                    block_size = self.weight_quant_bitnoise_decoder['block_size']
-                    fp_cols_num = self.weight_quant_bitnoise_decoder['fp_cols_num']
                     
                     cur_projection.add_quant_bitnoise_to_weight(
-                        bit=cur_bit, 
-                        block_size=block_size,
-                        fp_cols_num=fp_cols_num,
+                        bit=cur_bit,
                         compute_quant_scale=compute_quant_scale,
                         add_quant_noise_predict=add_noise_to_predict
                     )
+
+                    if learnable_quant_scale:
+                        cur_projection.quantizer.alpha_scale.requires_grad = True
+                    else:
+                        cur_projection.quantizer.alpha_scale.requires_grad = False
+
         self.weight_quant_bitnoise_decoder['compute_scale'] = False
 
     def quantize_weight(self):
@@ -2301,21 +2118,6 @@ class LlamaModel(LlamaPreTrainedModel):
         if not getattr(config, 'clip_softmax_eta', None):
             config.clip_softmax_eta = 1
 
-        # if not getattr(config, 'layer_bit', None):
-        #     config.layer_bit = {}
-        
-        # if not getattr(config, 'block_size', None):
-        #     config.block_size = 0
-
-        # if not getattr(config, 'outlier_ids', None):
-        #     config.outlier_ids = {}
-
-        if not getattr(config, 'STE', None):
-            config.STE = False
-
-        if not getattr(config, 'learnable_scales', None):
-            config.learnable_scales = False
-
         if not getattr(config, 'QuantizedLinear', None):
             config.QuantizedLinear = {
                 'replace': False,
@@ -2324,12 +2126,10 @@ class LlamaModel(LlamaPreTrainedModel):
                 'training_mode': 'train_full'
             }
 
-        if not getattr(config, 'weight_quant_noise', None):
+        if not getattr(config, 'symmetric_quantizer', None):
             config.symmetric_quantizer = {
                 'add': False,
                 'layer_bit': {},
-                'block_size': None,
-                'fp_cols_num': None,
                 'learnable_scale': False
             }
 
@@ -2348,9 +2148,8 @@ class LlamaModel(LlamaPreTrainedModel):
                 'add': False,
                 'predict': False,
                 'compute_scale': False,
-                'layer_bit': {},
-                'block_size': None,
-                'fp_cols_num': None
+                'learnable_scale': False,
+                'layer_bit': {}
             }
         
         # if not getattr(config, 'add_quant_noise', None):
@@ -2572,7 +2371,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         self.model.config.symmetric_quantizer['add'] = True    
         self.model.config.symmetric_quantizer['layer_bit'] = {}
-        self.model.config.symmetric_quantizer['block_size'] = 0
         self.model.config.symmetric_quantizer['learnable_scale'] = learnable_scale
 
         for layer_idx in range(self.model.config.num_hidden_layers):
@@ -2585,7 +2383,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 self.model.layers[layer_idx].symmetric_quantizer_decoder = {
                     'add': self.model.config.symmetric_quantizer['add'],
                     'layer_bit': {},
-                    'block_size': 0,
                     'learnable_scale': self.model.config.symmetric_quantizer['learnable_scale']
                 }
 
@@ -2620,22 +2417,20 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.model.config.weight_quant_noise['compute_scale'] = False
 
 
-    def add_quant_bitnoise_to_weight(self, layer_bit, block_size=128, fp_cols_num=128, compute_scale = True, quant_noise_predict=False):
+    def add_quant_bitnoise_to_weight(self, layer_bit, compute_scale=True, learnable_scale=False, quant_noise_predict=False):
         self.model.config.weight_quant_bitnoise['add'] = True
         self.model.config.weight_quant_bitnoise['predict'] = quant_noise_predict
         self.model.config.weight_quant_bitnoise['compute_scale'] = compute_scale
+        self.model.config.weight_quant_bitnoise['learnable_scale'] = learnable_scale
         self.model.config.weight_quant_bitnoise['layer_bit'] = layer_bit
-        self.model.config.weight_quant_bitnoise['block_size'] = block_size
-        self.model.config.weight_quant_bitnoise['fp_cols_num'] = fp_cols_num
 
         for layer_idx in range(self.model.config.num_hidden_layers):
             self.model.layers[layer_idx].weight_quant_bitnoise_decoder = {
                 'add': self.model.config.weight_quant_bitnoise['add'],
                 'predict': self.model.config.weight_quant_bitnoise['predict'],
                 'compute_scale': self.model.config.weight_quant_bitnoise['compute_scale'],
-                'layer_bit': self.model.config.weight_quant_bitnoise['layer_bit'].get(str(layer_idx)),
-                'block_size': self.model.config.weight_quant_bitnoise['block_size'],
-                'fp_cols_num': self.model.config.weight_quant_bitnoise['fp_cols_num']
+                'learnable_scale': self.model.config.weight_quant_bitnoise['learnable_scale'],
+                'layer_bit': self.model.config.weight_quant_bitnoise['layer_bit'].get(str(layer_idx))
             }
             self.model.layers[layer_idx].add_quant_bitnoise_to_weight()
         
