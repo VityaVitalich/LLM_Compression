@@ -855,47 +855,53 @@ class QuantizedLinear(nn.Module):
         self.quantizer.alpha_scale.data = alpha_scale.to(dtype=self.dtype, 
                                                          device=self.device)
 
+    def forward_with_quant_weight(self, input):
+        if self.outlier_cols_num == 0:
+            w = self.weight
+            int_out = F.linear(int_input, w)
+            dq_out = self.quantizer(int_out)
+
+            if self.bias is not None:
+                dq_out = dq_out + self.bias
+
+            return dq_out
+
+        elif self.outlier_cols_num > 0:
+            int_input = input[:, :, self.mask]
+            fp_input = input[:, :, ~self.mask]
+
+            int_out = F.linear(int_input, self.int_weight)
+            dq_out = self.quantizer(int_out)
+
+            fp_out = F.linear(fp_input, self.fp_weight) 
+            
+            if self.bias is not None:
+                fp_out = fp_out + self.bias
+
+            out = dq_out + fp_out
+
+            return out
+
+    def forward_with_fp_weight(self, input):
+        if self.outlier_cols_num == 0:
+            w = self.weight
+            return F.linear(input, w, self.bias)
+        
+        elif self.outlier_cols_num > 0:
+            out_w = torch.hstack([self.int_weight, 
+                                  self.fp_weight])
+            out_w = out_w[:, self.inv_col_perm]
+
+            return F.linear(input, out_w, self.bias)       
+
     def forward(self, input):  
         if self.is_quant_weight:
-
-            if self.outlier_cols_num == 0:
-                w = self.weight
-                int_out = F.linear(int_input, w)
-                dq_out = self.quantizer(int_out)
-
-                if self.bias is not None:
-                    dq_out = dq_out + self.bias
-
-                return dq_out
-
-            elif self.outlier_cols_num > 0:
-                int_input = input[:, :, self.mask]
-                fp_input = input[:, :, ~self.mask]
-
-                int_out = F.linear(int_input, self.int_weight)
-                dq_out = self.quantizer(int_out)
-
-                fp_out = F.linear(fp_input, self.fp_weight) 
-                
-                if self.bias is not None:
-                    fp_out = fp_out + self.bias
-
-                # out = torch.hstack([dq_out, fp_out])
-                # out = out[:, :, self.inv_col_perm]
-                out = dq_out + fp_out
-
-                return out
+            out = self.forward_with_quant_weight(input)
+            return out
 
         else:
-            if self.outlier_cols_num == 0:
-                w = self.weight              
-                return F.linear(input, w, self.bias)
-            
-            elif self.outlier_cols_num > 0:
-                out_w = torch.hstack([self.int_weight, 
-                                      self.fp_weight])
-                out_w = out_w[:, self.inv_col_perm]
-                return F.linear(input, out_w, self.bias)
+            out = self.forward_with_fp_weight(input)
+            return out
 
 
         if self.training:
