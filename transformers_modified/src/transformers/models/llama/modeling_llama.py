@@ -1876,6 +1876,7 @@ class LlamaDecoderLayer(nn.Module):
 
                 if outlier_ids is not None:
                     if from_fp:
+                        quantized_projection.device = cur_projection.weight.device
                         quantized_projection.set_mask(outlier_ids)
                         quantized_projection.from_fp_Linear(cur_projection)
 
