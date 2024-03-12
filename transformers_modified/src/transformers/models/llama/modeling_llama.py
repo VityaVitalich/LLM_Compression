@@ -457,7 +457,7 @@ class QuantizedLinear(nn.Module):
         out_features: int,
         outlier_cols_num: int,
         is_quant_weight: bool = False,
-        device: torch.device = torch.device('cpu'),
+        # device: torch.device = torch.device('cpu'),
         dtype: torch.dtype = torch.bfloat16
     ):
         super(QuantizedLinear, self).__init__()
@@ -467,7 +467,8 @@ class QuantizedLinear(nn.Module):
         self.int_in_features = None
         self.fp_in_features = None
         self.outlier_cols_num = outlier_cols_num
-        self.device = device
+        # self.device = device
+        self.device = None
         self.dtype = dtype
         self.is_quant_weight = is_quant_weight
         self.training_mode = None
@@ -477,8 +478,11 @@ class QuantizedLinear(nn.Module):
 
 
         if self.outlier_cols_num == 0:
+            # weight = torch.rand((self.out_features, self.in_features), 
+            #                     dtype=self.dtype, device=self.device)
+
             weight = torch.rand((self.out_features, self.in_features), 
-                                dtype=dtype, device=device)
+                                dtype=self.dtype)
             
             self.weight = nn.Parameter(weight)
             self.bias = None
@@ -491,31 +495,43 @@ class QuantizedLinear(nn.Module):
             self.int_in_features = self.in_features - self.outlier_cols_num
             self.fp_in_features = self.outlier_cols_num
             
+            # int_weight = torch.rand((self.out_features, self.int_in_features), 
+            #                         dtype=self.dtype, device=self.device)
+            # fp_weight = torch.rand((self.out_features, self.fp_in_features), 
+            #                         dtype=self.dtype, device=self.device)
+
             int_weight = torch.rand((self.out_features, self.int_in_features), 
-                                    dtype=dtype, device=device)
+                                    dtype=self.dtype)
             fp_weight = torch.rand((self.out_features, self.fp_in_features), 
-                                    dtype=dtype, device=device)
+                                    dtype=self.dtype)
 
             self.int_weight = nn.Parameter(int_weight)
             self.fp_weight = nn.Parameter(fp_weight)
             self.bias = None
 
-            mask = torch.ones(self.in_features, 
-                              dtype=torch.bool, 
-                              device=self.device)
-            col_perm = torch.arange(self.in_features, 
-                                    dtype=torch.int32, 
-                                    device=self.device)
-            inv_col_perm = torch.zeros(col_perm.numel(), 
-                                       dtype=col_perm.dtype,
-                                       device=self.device)
+            # mask = torch.ones(self.in_features, 
+            #                   dtype=torch.bool, 
+            #                   device=self.device)
+            # col_perm = torch.arange(self.in_features, 
+            #                         dtype=torch.int32, 
+            #                         device=self.device)
+            # inv_col_perm = torch.zeros(col_perm.numel(), 
+            #                            dtype=col_perm.dtype,
+            #                            device=self.device)
 
-            self.mask = mask
-            self.col_perm = col_perm
-            self.inv_col_perm = inv_col_perm
-            # self.register_buffer("mask", mask)
-            # self.register_buffer("col_perm", col_perm)
-            # self.register_buffer("inv_col_perm", inv_col_perm)
+            mask = torch.ones(self.in_features, 
+                              dtype=torch.bool)
+            col_perm = torch.arange(self.in_features, 
+                                    dtype=torch.int32)
+            inv_col_perm = torch.zeros(col_perm.numel(), 
+                                       dtype=col_perm.dtype)           
+
+            # self.mask = mask
+            # self.col_perm = col_perm
+            # self.inv_col_perm = inv_col_perm
+            self.register_buffer("mask", mask)
+            self.register_buffer("col_perm", col_perm)
+            self.register_buffer("inv_col_perm", inv_col_perm)
 
         else:
             raise ValueError('Number of outlier columns should be non-negative!')
@@ -523,23 +539,38 @@ class QuantizedLinear(nn.Module):
 
     @torch.no_grad
     def set_mask(self, outlier_ids: torch.tensor):
+        # self.device = self.fp_weight.device
+        # self.mask = torch.ones(self.in_features, 
+        #                        dtype=torch.bool, 
+        #                        device=self.device)
+        # self.mask[outlier_ids] = False
+
+        # col_ids = torch.arange(self.in_features, 
+        #                        dtype=torch.int32, 
+        #                        device=self.device)
+        # self.col_perm = torch.cat([col_ids[self.mask], 
+        #                            col_ids[~self.mask]])
+
+        # self.inv_col_perm = torch.zeros(self.col_perm.numel(), 
+        #                                 dtype=self.col_perm.dtype,
+        #                                 device=self.device)
+        # self.inv_col_perm[self.col_perm] = torch.arange(self.col_perm.numel(),
+        #                                                 dtype=self.col_perm.dtype,
+        #                                                 device=self.device)
+
         self.mask = torch.ones(self.in_features, 
-                               dtype=torch.bool, 
-                               device=self.device)
+                               dtype=torch.bool)
         self.mask[outlier_ids] = False
 
         col_ids = torch.arange(self.in_features, 
-                               dtype=torch.int32, 
-                               device=self.device)
+                               dtype=torch.int32)
         self.col_perm = torch.cat([col_ids[self.mask], 
                                    col_ids[~self.mask]])
 
         self.inv_col_perm = torch.zeros(self.col_perm.numel(), 
-                                        dtype=self.col_perm.dtype,
-                                        device=self.device)
+                                        dtype=self.col_perm.dtype)
         self.inv_col_perm[self.col_perm] = torch.arange(self.col_perm.numel(),
-                                                        dtype=self.col_perm.dtype,
-                                                        device=self.device)
+                                                        dtype=self.col_perm.dtype)       
 
     def from_fp_Linear(
         self,
@@ -1830,7 +1861,8 @@ class LlamaDecoderLayer(nn.Module):
                 in_features = cur_projection.in_features
                 out_features = cur_projection.out_features
                 outlier_cols_num = len(outlier_ids)
-                device = cur_projection.weight.device
+                
+                # device = cur_projection.weight.device
                 dtype = cur_projection.weight.dtype
 
                 quantized_projection = QuantizedLinear(
@@ -1838,20 +1870,24 @@ class LlamaDecoderLayer(nn.Module):
                     out_features=out_features,
                     outlier_cols_num=outlier_cols_num,
                     is_quant_weight=is_quant_weight,
-                    device=device,
+                    # device=device,
                     dtype=dtype
                 )
 
                 if outlier_ids is not None:
-                    quantized_projection.set_mask(outlier_ids)
+                    if from_fp:
+                        quantized_projection.set_mask(outlier_ids)
+                        quantized_projection.from_fp_Linear(cur_projection)
+
                     quantized_projection.set_training_mode(training_mode)
 
-                if from_fp:
-                    quantized_projection.from_fp_Linear(cur_projection)
+                # if from_fp:
+                #     if outlier_ids is not None:
+                #         quantized_projection.set_mask(outlier_ids)
+                #         quantized_projection.set_training_mode(training_mode)
+                #         quantized_projection.from_fp_Linear(cur_projection)
 
                 setattr(cur_layer, proj_name, quantized_projection)
-                break
-            break
 
     def add_symmetric_quantizer(self):
         layers = ['self_attn', 'mlp']

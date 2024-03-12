@@ -28,7 +28,7 @@ def model_configs():
     # config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
     # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama7b_mixed_weight'
     # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama7b_3bit_loaded'
-    # config.model_name_or_path = '/home/exp_results/output/instruct/llama_with_noise4bit_fp_sft_transformers_bitnoise_block0/checkpoint-200'
+    # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama_quik3bit_transformers_sft_mixture_only_fp_quant_split_weight/checkpoint-200'
     # config.model_name_or_path = '/home/LLM_compression/QUIK/weights/llama7b_3bit_128fp_quant_scales'
     config.model_name_or_path = '/home/exp_results/output/instruct/llama7b_test_outliers/checkpoint-2'
     config.model_config_name = None
