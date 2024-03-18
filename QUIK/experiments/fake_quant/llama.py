@@ -32,6 +32,12 @@ def llama_parser():
     )
 
     parser.add_argument(
+        '--replace_QuantizedLinear',
+        help='Replace QuantizedLinear layers by Linear ones to quantize model',
+        action='store_true'
+    )
+
+    parser.add_argument(
         '--path_to_act_scales', type=str,
         help='act_scales to load;',
         default='../act_scales/Llama-2-7b-hf.pt'
@@ -278,9 +284,8 @@ if __name__ == '__main__':
         import wandb
         wandb.init(project="quik", entity=args.wandb_name)
         wandb.config.update(args)
-        
     
-    model = modelutils.get_llama(args.model, args.hf_token)
+    model = modelutils.get_llama(args.model, args.hf_token, args.replace_QuantizedLinear)
     model.eval()
     
     # Extract Scale

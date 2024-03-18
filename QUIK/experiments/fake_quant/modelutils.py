@@ -48,7 +48,7 @@ def get_falcon(model, hf_token):
     return model
 
 
-def get_llama(model, hf_token):
+def get_llama(model, hf_token, replace_QuantizedLinear):
     import torch
     torch.nn.init.kaiming_uniform_ = skip
     torch.nn.init.uniform_ = skip
@@ -58,6 +58,10 @@ def get_llama(model, hf_token):
                                                           use_auth_token=hf_token,
                                                           low_cpu_mem_usage=True)
     model.seqlen = 2048
+
+    if replace_QuantizedLinear:
+        model.replace_QuantizedLinear()
+
     return model
 
 
