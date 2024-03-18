@@ -30,7 +30,8 @@ def model_configs():
     # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama7b_3bit_loaded'
     # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama_quik3bit_transformers_sft_mixture_only_fp_quant_split_weight/checkpoint-200'
     # config.model_name_or_path = '/home/LLM_compression/QUIK/weights/llama7b_3bit_128fp_quant_scales'
-    config.model_name_or_path = '/home/exp_results/output/instruct/llama7b_test_outliers/checkpoint-2'
+    # config.model_name_or_path = '/home/exp_results/output/instruct/llama7b_test_outliers/checkpoint-2'
+    config.model_name_or_path = '/home/Quantization/weights_study/weights/checkpoint-600'
     config.model_config_name = None
     config.tokenizer_name = None
     config.token = None
@@ -116,10 +117,10 @@ def model_configs():
 
     ### BitNoiseQuant
     config.BitNoiseQuant = {
-        'add_quant_noise': False,
+        'add_quant_noise': True,
         'predict': False,
-        'compute_scale': False,
-        'learnable_scale': False,
+        'compute_scale': True,
+        'learnable_scale': True,
         'layer_bits': {'q': 2, 'k': 2, 'v': 2, 'o': 2, 'down': 2, 'gate': 2, 'up': 2}
     }
 
