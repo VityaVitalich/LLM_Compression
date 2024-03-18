@@ -15,16 +15,33 @@ DEV = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 def llama_parser():
     parser = argparse.ArgumentParser()
     
+    # parser.add_argument(
+    #     '--model', type=str,
+    #     help='LLAMA-2 model to load;',
+    #     default='meta-llama/Llama-2-7b-hf', 
+    #     choices=[
+    #     'meta-llama/Llama-2-7b-hf',
+    #     'meta-llama/Llama-2-13b-hf',
+    #     'meta-llama/Llama-2-70b-hf'
+    #     ]
+    # )
     parser.add_argument(
         '--model', type=str,
         help='LLAMA-2 model to load;',
-        default='meta-llama/Llama-2-7b-hf', 
-        choices=[
-        'meta-llama/Llama-2-7b-hf',
-        'meta-llama/Llama-2-13b-hf',
-        'meta-llama/Llama-2-70b-hf'
-        ]
+        default='meta-llama/Llama-2-7b-hf'
     )
+
+    parser.add_argument(
+        '--path_to_act_scales', type=str,
+        help='act_scales to load;',
+        default='../act_scales/Llama-2-7b-hf.pt'
+    )
+
+    parser.add_argument(
+        '--path_to_save_quant_model', type=str,
+        help='path to save model after quantization;'
+    )    
+
     parser.add_argument(
         '--dataset', type=str, choices=['wikitext2', 'ptb', 'c4'],
         help='Where to extract calibration data from.', default='c4'
@@ -49,7 +66,7 @@ def llama_parser():
     parser.add_argument('--a_bits', type=int, default=16, choices=[4, 8, 16])
 
     # Weight Quantization Params: 
-    parser.add_argument('--w_bits', type=int, default=16, choices=[2, 4, 8, 16])
+    parser.add_argument('--w_bits', type=int, default=16, choices=[2, 3, 4, 8, 16])
     parser.add_argument('--w_clip', action='store_true', help='Use clipping for weight quantization')
     parser.add_argument('--w_asym', action='store_true')
     
@@ -88,6 +105,7 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
     use_cache = model.config.use_cache
     model.config.use_cache = False
     layers = model.model.layers
+    save_dict = {}
 
     model.model.embed_tokens = model.model.embed_tokens.to(dev)
     model.model.norm = model.model.norm.to(dev)
@@ -215,7 +233,25 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                     blocksize=128)
                 else:
                     modules_quik[name].fasterquant(percdamp=args.percdamp, groupsize=-1)
+                
                 quantizers['model.layers.%d.%s' % (i, name)] = modules_quik[name].quantizer
+                save_dict['model.layers.%d.%s' % (i, name)] = {}
+                # save_dict['model.layers.%d.%s' % (i, name)]['dequant_weight'] = modules_quik[name].layer.weight.data.to("cpu")
+            #    save_dict['model.layers.%d.%s' % (i, name)]['quant_weight'] = modules_quik[name].quant_weight.to("cpu")
+                
+                # if modules_quik[name].fp_features > 0:
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = modules_quik[name].fp_indices
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = \
+                #             modules_quik[name].layer.weight.data[:, modules_quik[name].fp_indices].to("cpu")
+                # else:
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = None
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = None
+
+                save_dict['model.layers.%d.%s' % (i, name)]['alpha'] = modules_quik[name].quantizer.alpha.to("cpu")
+                # save_dict['model.layers.%d.%s' % (i, name)]['alpha_pq'] = modules_quik[name].quantizer.alpha_pq.to("cpu")
+               # save_dict['model.layers.%d.%s' % (i, name)]['bit'] = torch.tensor(modules_quik[name].quantizer.bits)
+               # save_dict['model.layers.%d.%s' % (i, name)]['sym'] = torch.tensor(modules_quik[name].quantizer.sym)
+                
                 modules_quik[name].free()
 
         for j in range(args.nsamples):
@@ -230,7 +266,7 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
 
     model.config.use_cache = use_cache
     
-    return quantizers
+    return quantizers, save_dict
 
 
 if __name__ == '__main__':
@@ -250,7 +286,9 @@ if __name__ == '__main__':
     # Extract Scale
     if args.w_bits < 16 or args.a_bits < 16 or args.int8_2_4 or args.smoothquant or args.sparseGPT:
         if args.fp_features > 0 or args.int8_2_4 or args.smoothquant:
-            relative_path = os.path.join(modelutils.act_scale_dir, "{}.pt".format(args.model.split('/')[-1]))
+            # relative_path = os.path.join(modelutils.act_scale_dir, "{}.pt".format(args.model.split('/')[-1]))
+            # relative_path = "/home/projects/LLM_comression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt"
+            relative_path = args.path_to_act_scales
             act_scales = torch.load(relative_path)
             print('Loaded act_scales from: ', relative_path)
         else:
@@ -315,8 +353,7 @@ if __name__ == '__main__':
             args.dataset, nsamples=args.nsamples, seed=args.seed, model=args.model, seqlen=model.seqlen, 
             synthetic_data=args.synthetic_data, hf_token=args.hf_token
         )
-        quantizers = llama_sequential(model, dataloader, act_scales, DEV, args)
-    
+        quantizers, save_dict = llama_sequential(model, dataloader, act_scales, DEV, args)
     
     # Add Input Quantization
     if args.a_bits < 16:
@@ -361,8 +398,9 @@ if __name__ == '__main__':
             wandb.log({'zero_outlier_linear': number_of_zero_outlier_linear})
         print(f'{number_of_zero_outlier_linear} layers with zero outliers.\n')
 
-    save_path = f"/home/compression/quik_cache/llama7b_{args.w_bits}w_{args.a_bits}a_{args.fp_features}fp_true.pt"
-    torch.save(model, save_path)
+    save_path = args.path_to_save_quant_model
+    model.save_pretrained(save_path)
+
     datasets = ['wikitext2']
     for dataset in datasets:
         dataloader, testloader = datautils.get_loaders(

@@ -1,3 +1,9 @@
+logs/
+figs/
+wandb/
+*.pickle
+weights/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -20,6 +26,8 @@ parts/
 sdist/
 var/
 wheels/
+wandb/
+weights/
 share/python-wheels/
 *.egg-info/
 .installed.cfg

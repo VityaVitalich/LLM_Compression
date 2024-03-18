@@ -14,9 +14,38 @@ def symmetric_quantize(x, scale, bits):
         q = torch.clamp(torch.round(x / scale), -8, 7)
     elif bits == 8:
         q = torch.clamp(torch.round(x / scale), -128, 127)
+    elif bits == 3:
+        q = torch.clamp(torch.round(x / scale), -4, 3)
     elif bits == 2:
         q = torch.clamp(torch.round(x / scale), -2, 1)
     return scale * q
+
+def asymmetric_quantize_fp_to_int(x, scale, zero, maxq):
+    q = torch.clamp(torch.round(x / scale) + zero, 0, maxq)
+    return (q - zero)
+
+def symmetric_quantize_fp_to_int(x, scale, bits):
+    if bits == 16:
+        return x
+    elif bits == 4:
+        q = torch.clamp(torch.round(x / scale), -8, 7)
+    elif bits == 8:
+        q = torch.clamp(torch.round(x / scale), -128, 127)
+    elif bits == 3:
+        q = torch.clamp(torch.round(x / scale), -4, 3)
+    elif bits == 2:
+        q = torch.clamp(torch.round(x / scale), -2, 1)
+    return q
+
+# def asymmetric_dequantize_int_to_fp(x, scale, zero, maxq):
+#     q = torch.clamp(torch.round(x / scale) + zero, 0, maxq)
+#     return (q - zero)
+
+def symmetric_dequantize_int_to_fp(x, scale, bits):
+    if bits == 16:
+        return x
+    q = scale * x.clone()
+    return q
 
 class WeightQuantizer(torch.nn.Module):
     '''
@@ -28,6 +57,7 @@ class WeightQuantizer(torch.nn.Module):
         super(WeightQuantizer, self).__init__()
         self.register_buffer('maxq', torch.tensor(0))
         self.register_buffer('scale', torch.zeros(shape))
+        self.register_buffer('alpha', torch.zeros(shape))
         self.register_buffer('zero', torch.zeros(shape))
 
     def configure(
@@ -38,6 +68,8 @@ class WeightQuantizer(torch.nn.Module):
         if sym:
             if self.bits == 2:
                 self.maxq = torch.tensor(1)
+            elif self.bits == 3:
+                self.maxq = torch.tensor(3)
             elif self.bits == 4:
                 self.maxq = torch.tensor(7)
             elif self.bits == 8:
@@ -49,6 +81,8 @@ class WeightQuantizer(torch.nn.Module):
         else:
             if self.bits == 2:
                 self.maxq = torch.tensor(3)
+            elif self.bits == 3:
+                self.maxq = torch.tensor(7)
             elif self.bits == 4:
                 self.maxq = torch.tensor(15)
             elif self.bits == 8:
@@ -91,9 +125,11 @@ class WeightQuantizer(torch.nn.Module):
 
         
         if self.sym:
+            self.alpha = xmax
             self.scale = xmax / self.maxq
             self.zero = torch.zeros_like(self.scale)
         else:
+            self.alpha = xmax - xmin
             self.scale = (xmax - xmin) / self.maxq
             self.zero = torch.round(-xmin / self.scale)
 
@@ -105,11 +141,12 @@ class WeightQuantizer(torch.nn.Module):
                 xmin1 = p * xmin
 
                 if self.sym:
+                    alpha1 = xmax1
                     scale1 = xmax1 / self.maxq
                     zero1 = torch.zeros_like(scale1)
                     q = symmetric_quantize(x, scale1.unsqueeze(1), self.bits)
                 else:
-                    
+                    alpha1 = xmax1 - xmin1
                     scale1 = (xmax1 - xmin1) / self.maxq
                     zero1 = torch.round(-xmin1 / scale1)
                     q = asymmetric_quantize(x, scale1.unsqueeze(1), zero1.unsqueeze(1), self.maxq)           
@@ -120,15 +157,18 @@ class WeightQuantizer(torch.nn.Module):
                 tmp = err < best
                 if torch.any(tmp):
                     best[tmp] = err[tmp]
+                    self.alpha[tmp] = alpha1[tmp]
                     self.scale[tmp] = scale1[tmp]
                     self.zero[tmp] = zero1[tmp]
                 
         if not self.perchannel:
             tmp = shape[0]
+            self.alpha = self.alpha.repeat(tmp)
             self.scale = self.scale.repeat(tmp)
             self.zero = self.zero.repeat(tmp)
 
         shape = [-1] + [1] * (len(shape) - 1)
+        self.alpha = self.alpha.reshape(shape)
         self.scale = self.scale.reshape(shape)
         self.zero = self.zero.reshape(shape)
         if torch.any(torch.isnan(self.scale)):
@@ -138,14 +178,99 @@ class WeightQuantizer(torch.nn.Module):
             print(self.maxq)
         return
 
+    def post_quant_find_params(self, x, q):
+        if self.bits == 16:
+            return
+        dev = x.device
+        self.maxq = self.maxq.to(dev)
+
+        shape = x.shape
+        if self.perchannel:
+            x = x.flatten(1)
+        else:
+            x = x.flatten().unsqueeze(0)
+
+        tmp = torch.zeros(x.shape[0], device=dev)
+        xmin = torch.minimum(x.min(1)[0], tmp)
+        xmax = torch.maximum(x.max(1)[0], tmp)
+
+        if self.sym:
+            xmax = torch.maximum(torch.abs(xmin), xmax)
+            tmp = xmin < 0
+            if torch.any(tmp):
+                xmin[tmp] = -xmax[tmp]
+        tmp = (xmin == 0) & (xmax == 0)
+        xmin[tmp] = -1
+        xmax[tmp] = +1
+
+        
+        if self.sym:
+            self.alpha_pq = xmax
+            self.scale_pq = xmax / self.maxq
+            self.zero_pq = torch.zeros_like(self.scale_pq)
+        else:
+            self.alpha_pq = xmax - xmin
+            self.scale_pq = (xmax - xmin) / self.maxq
+            self.zero_pq = torch.round(-xmin / self.scale_pq)
+            raise Exception("Not implemented yet!")
+
+        if self.mse:
+            best = torch.full([x.shape[0]], float('inf'), device=dev)
+            for i in range(int(self.maxshrink * self.grid)):
+                p = 1 - i / self.grid 
+                xmax1 = p * xmax
+                xmin1 = p * xmin
+
+                if self.sym:
+                    alpha1 = xmax1
+                    scale1 = xmax1 / self.maxq
+                    zero1 = torch.zeros_like(scale1)
+                    # q = symmetric_quantize(x, scale1.unsqueeze(1), self.bits)
+                    w_dq = symmetric_dequantize_int_to_fp(q, scale1.unsqueeze(1), self.bits)
+                else:
+                    alpha1 = xmax1 - xmin1
+                    scale1 = (xmax1 - xmin1) / self.maxq
+                    zero1 = torch.round(-xmin1 / scale1)
+                    # q = asymmetric_quantize(x, scale1.unsqueeze(1), zero1.unsqueeze(1), self.maxq)
+                    raise Exception("Not implemented yet!")           
+                w_dq -= x
+                w_dq.abs_()
+                w_dq.pow_(self.norm)
+                err = torch.sum(w_dq, 1)
+                tmp = err < best
+                if torch.any(tmp):
+                    best[tmp] = err[tmp]
+                    self.alpha_pq[tmp] = alpha1[tmp]
+                    self.scale_pq[tmp] = scale1[tmp]
+                    self.zero_pq[tmp] = zero1[tmp]
+                
+        if not self.perchannel:
+            tmp = shape[0]
+            self.alpha_pq = self.alpha_pq.repeat(tmp)
+            self.scale_pq = self.scale_pq.repeat(tmp)
+            self.zero_pq = self.zero_pq.repeat(tmp)
+
+        shape = [-1] + [1] * (len(shape) - 1)
+        self.alpha_pq = self.alpha_pq.reshape(shape)
+        self.scale_pq = self.scale_pq.reshape(shape)
+        self.zero_pq = self.zero_pq.reshape(shape)
+        if torch.any(torch.isnan(self.scale_pq)):
+            print('nan scale WARNING')
+            print(self.scale_pq, self.zero_pq)
+            print(xmax)
+            print(self.maxq)
+        
+        # return alpha_pq, scale_pq, zero_pq
+
+
     def quantize(self, x):
         if self.bits == 16:
             return x
         
         if self.ready():
             if self.sym:
-                return symmetric_quantize(x, self.scale, self.bits)
-            return asymmetric_quantize(x, self.scale, self.zero, self.maxq)
+                return symmetric_quantize_fp_to_int(x, self.scale, self.bits)
+            return asymmetric_quantize_fp_to_int(x, self.scale, self.zero, self.maxq)
         return x
 
     def enabled(self):

@@ -488,6 +488,7 @@ class HFLM(LM):
                     revision=revision,
                     torch_dtype=utils.get_dtype(dtype),
                     trust_remote_code=trust_remote_code,
+                #    device_map="auto",
                     **model_kwargs,
                 )
         else:
