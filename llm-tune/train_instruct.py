@@ -477,6 +477,7 @@ def run_train(
             layer_bit=layer_bit,
             compute_scale=noise_config['compute_scale'],
             learnable_scale=noise_config['learnable_scale'],
+            noise_type=noise_config['noise_type'],
             quant_noise_predict=noise_config['predict']
         )
 

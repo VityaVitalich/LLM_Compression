@@ -25,13 +25,13 @@ def model_configs():
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    # config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
+    config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
     # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama7b_mixed_weight'
     # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama7b_3bit_loaded'
     # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama_quik3bit_transformers_sft_mixture_only_fp_quant_split_weight/checkpoint-200'
     # config.model_name_or_path = '/home/LLM_compression/QUIK/weights/llama7b_3bit_128fp_quant_scales'
     # config.model_name_or_path = '/home/exp_results/output/instruct/llama7b_test_outliers/checkpoint-2'
-    config.model_name_or_path = '/home/Quantization/weights_study/weights/checkpoint-600'
+    # config.model_name_or_path = '/home/Quantization/weights_study/weights/checkpoint-600'
     config.model_config_name = None
     config.tokenizer_name = None
     config.token = None
@@ -94,7 +94,7 @@ def model_configs():
 
     ### Load Quantized Weight After Quik
     config.loading_quik_quant_weight = {
-        'load_weight': True,
+        'load_weight': False,
         'path_to_quant_params': '/home/LLM_compression/QUIK/weights/llama7b_3bit_128fp_quant_scales/quant_params.pt',
         'learnable_scale': False
     }
@@ -120,7 +120,8 @@ def model_configs():
         'add_quant_noise': True,
         'predict': False,
         'compute_scale': True,
-        'learnable_scale': True,
+        'learnable_scale': False,
+        'noise_type': 'normal',
         'layer_bits': {'q': 2, 'k': 2, 'v': 2, 'o': 2, 'down': 2, 'gate': 2, 'up': 2}
     }
 

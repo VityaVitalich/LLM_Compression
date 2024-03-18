@@ -297,13 +297,16 @@ class BitNoiseQuant(nn.Module):
     def __init__(
         self,
         out_features,
-        bit
+        bit,
+        noise_type
     )-> None:
 
         super(BitNoiseQuant, self).__init__()
         self.out_features = out_features
 
         self.bit = torch.tensor(bit)
+        self.noise_type = noise_type
+        
 
         alpha = torch.ones((out_features, 1))
         self.alpha_scale = nn.Parameter(alpha)
@@ -394,11 +397,7 @@ class BitNoiseQuant(nn.Module):
         # alpha = F.softplus(alpha, beta=10**(6), threshold=1) 
         # lsq = self._lsq_forward(w, bit.round(), alpha)
 
-        c1 = w >= alpha
-        c2 = w <= -alpha     
-        delta = alpha / (2**(bit - 1) - 1)
-
-        with torch.no_grad():                
+        # with torch.no_grad():                
             # diff = (lsq - w) / delta #difference between dequantized and original weights after their scale
             # sel = diff[torch.logical_not(torch.logical_or(c1, c2))] #take weights less than alpha
             # hist = torch.histc(sel.float(), bins=N_BIN, min=-0.5, max=0.5)    
@@ -406,13 +405,24 @@ class BitNoiseQuant(nn.Module):
             # noise = torch.multinomial(hist, w.numel(), True) + torch.rand_like(w.view(-1))               
             # noise = (noise / N_BIN - 0.5).view(w.shape)
             # noise = noise.to(w.dtype)
+
+        delta = alpha / (2**(bit - 1) - 1)
+        if self.noise_type == 'normal':
             noise = torch.randn_like(w, requires_grad=False) / 2
+        elif self.noise_type == 'uniform':
+            noise = torch.rand_like(w, requires_grad=False) / 2
 
         w_rand = noise * delta
-        w_clipped = torch.where(c2, -alpha, w + w_rand)
-        w_clipped = torch.where(c1, alpha, w_clipped)
+
+        if self.alpha_scale.requires_grad:  
+            c1 = w >= alpha
+            c2 = w <= -alpha     
+            w_clipped = torch.where(c2, -alpha, w + w_rand)
+            w_out = torch.where(c1, alpha, w_clipped)
+        else:
+            w_out = w + w_rand
         
-        return w_clipped
+        return w_out
 
     def quant_noise(self, quant_weight) -> torch.tensor:
 
@@ -426,9 +436,9 @@ class BitNoiseQuant(nn.Module):
         if bit.device != device:
             bit = bit.to(device)
 
-        w_clipped = self._compute_quant_noise(w, bit, alpha)
+        w_out = self._compute_quant_noise(w, bit, alpha)
 
-        return w_clipped
+        return w_out
 
     def quantize_weight(self, quant_weight):
 
@@ -613,6 +623,7 @@ class QuantizedLinear(nn.Module):
     def add_quant_bitnoise_to_weight(
         self, 
         bit,
+        noise_type,
         compute_quant_scale,
         add_quant_noise_predict
     ):
@@ -627,7 +638,8 @@ class QuantizedLinear(nn.Module):
 
         self.quantizer = BitNoiseQuant(
             out_features=w.shape[0],
-            bit=bit
+            bit=bit,
+            noise_type=noise_type
         )
 
         if compute_quant_scale:
@@ -1411,7 +1423,8 @@ class LlamaDecoderLayer(nn.Module):
             'predict': config.weight_quant_bitnoise['predict'],
             'compute_scale': config.weight_quant_bitnoise['compute_scale'],
             'learnable_scale': config.weight_quant_bitnoise['learnable_scale'],
-            'layer_bit': config.weight_quant_bitnoise['layer_bit'].get(str(layer_idx))
+            'noise_type': config.weight_quant_bitnoise['noise_type'],
+            'layer_bit': config.weight_quant_bitnoise['layer_bit'].get(str(layer_idx)),
         }
 
         if self.QuantizedLinear_decoder['replace']:
@@ -1657,12 +1670,14 @@ class LlamaDecoderLayer(nn.Module):
                     add_noise_to_predict = self.weight_quant_bitnoise_decoder['predict']
                     compute_quant_scale = self.weight_quant_bitnoise_decoder['compute_scale']
                     learnable_quant_scale = self.weight_quant_bitnoise_decoder['learnable_scale']
+                    noise_type = self.weight_quant_bitnoise_decoder['noise_type']
                     cur_bit = self.weight_quant_bitnoise_decoder['layer_bit'].get(f'{layer_name}.{proj_name}')
                     
                     cur_projection.add_quant_bitnoise_to_weight(
                         bit=cur_bit,
                         compute_quant_scale=compute_quant_scale,
-                        add_quant_noise_predict=add_noise_to_predict
+                        add_quant_noise_predict=add_noise_to_predict,
+                        noise_type=noise_type
                     )
 
                     if learnable_quant_scale:
@@ -1853,6 +1868,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 'predict': False,
                 'compute_scale': False,
                 'learnable_scale': False,
+                'noise_type': 'normal',
                 'layer_bit': {}
             }
 
@@ -2060,6 +2076,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             'predict': False,
             'compute_scale': False,
             'learnable_scale': False,
+            'noise_type': 'normal',
             'layer_bit': {}
         }
         
@@ -2139,11 +2156,19 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         self.model.config.weight_quant_noise['compute_scale'] = False
 
 
-    def add_quant_bitnoise_to_weight(self, layer_bit, compute_scale=True, learnable_scale=False, quant_noise_predict=False):
+    def add_quant_bitnoise_to_weight(
+        self, 
+        layer_bit, 
+        compute_scale=True, 
+        learnable_scale=False, 
+        quant_noise_predict=False,
+        noise_type='normal'
+    ):
         self.model.config.weight_quant_bitnoise['add'] = True
         self.model.config.weight_quant_bitnoise['predict'] = quant_noise_predict
-        self.model.config.weight_quant_bitnoise['compute_scale'] = compute_scale
         self.model.config.weight_quant_bitnoise['learnable_scale'] = learnable_scale
+        self.model.config.weight_quant_bitnoise['compute_scale'] = compute_scale
+        self.model.config.weight_quant_bitnoise['noise_type'] = noise_type        
         self.model.config.weight_quant_bitnoise['layer_bit'] = layer_bit
 
         for layer_idx in range(self.model.config.num_hidden_layers):
@@ -2152,6 +2177,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
                 'predict': self.model.config.weight_quant_bitnoise['predict'],
                 'compute_scale': self.model.config.weight_quant_bitnoise['compute_scale'],
                 'learnable_scale': self.model.config.weight_quant_bitnoise['learnable_scale'],
+                'noise_type': self.model.config.weight_quant_bitnoise['noise_type'],
                 'layer_bit': self.model.config.weight_quant_bitnoise['layer_bit'].get(str(layer_idx))
             }
             self.model.layers[layer_idx].add_quant_bitnoise_to_weight()
