@@ -7,8 +7,8 @@ def model_configs():
 
     ### DATASET ###
     data = config.data = ml_collections.ConfigDict()
-    data.dataset_name = "logs/test_dataset"
-    data.dataset_config_name =None #'wikitext-2-raw-v1'
+    data.dataset_name = "etlogs/test_dataset"
+    data.dataset_config_name = None #'wikitext-2-raw-v1'
     data.valid_split = 5
     data.block_size = 32
     data.dataset_percentage = 100
