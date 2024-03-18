@@ -1,13 +1,13 @@
 #!/bin/bash
 
-MODEL_PATH="meta-llama/Llama-2-7b-hf"
-OUTPUT_PATH="/home/data/compression/quik_cache/tulu-llama-7b" #"/home/cache/wikitext_llama-7b"
-BATCH_SIZE=2
-DATASET_NAME="allenai/tulu-v2-sft-mixture"
+MODEL_PATH="allenai/tulu-2-dpo-70b"
+OUTPUT_PATH="/home/cache/lima_tulu70b-dpo/" #"/home/cache/wikitext_llama-7b"
+BATCH_SIZE=4
+DATASET_NAME="VityaVitalich/LIMA"
 DATASET_CONFIG_NAME="wikitext-2-raw-v1"
 BLOCK_SIZE=2048
-DATASET_PERCENTAGE=10
-CACHE_DIR="/home/data/taxonomy/hf_cache/"
+DATASET_PERCENTAGE=100
+CACHE_DIR="/home/cache/"
 INSTRUCT=1
 TOKEN="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"
 
