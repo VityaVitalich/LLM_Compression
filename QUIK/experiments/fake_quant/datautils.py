@@ -15,13 +15,12 @@ def get_wikitext2(nsamples, seed, seqlen, model, hf_token):
     testdata = datasets.load_dataset('wikitext', 'wikitext-2-raw-v1', split='test')
 
     if hf_token is None:
-        tokenizer = transformers.AutoTokenizer.from_pretrained(model, use_fast=False)
+        tokenizer = transformers.AutoTokenizer.from_pretrained(model)
     else:
-        tokenizer = transformers.AutoTokenizer.from_pretrained(model, use_fast=False, use_auth_token=hf_token)
-        
-    trainenc = tokenizer("\n\n".join(traindata['text']), return_tensors='pt')
-    testenc = tokenizer("\n\n".join(testdata['text']), return_tensors='pt')
-
+        tokenizer = transformers.AutoTokenizer.from_pretrained(model, use_auth_token=hf_token)
+    
+    trainenc = tokenizer("\n\n".join(traindata['text'][:nsamples]), return_tensors='pt')
+    testenc = tokenizer("\n\n".join(testdata['text'][:nsamples]), return_tensors='pt')
     random.seed(seed)
     trainloader = []
     for _ in range(nsamples):
