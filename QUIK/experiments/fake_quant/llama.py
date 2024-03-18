@@ -355,7 +355,6 @@ if __name__ == '__main__':
         )
         quantizers, save_dict = llama_sequential(model, dataloader, act_scales, DEV, args)
     
-    
     # Add Input Quantization
     if args.a_bits < 16:
         number_of_zero_outlier_linear = 0
@@ -399,11 +398,8 @@ if __name__ == '__main__':
             wandb.log({'zero_outlier_linear': number_of_zero_outlier_linear})
         print(f'{number_of_zero_outlier_linear} layers with zero outliers.\n')
 
-    # save_path = f"/home/projects/LLM_comression/QUIK/weights/llama7b_{args.w_bits}w_{args.a_bits}a_{args.fp_features}_quant_from_finetune_outliers_orig"
     save_path = args.path_to_save_quant_model
-    # torch.save(model, save_path)
     model.save_pretrained(save_path)
-    torch.save(save_dict, f"{save_path}/quantazed_model.pt")
 
     datasets = ['wikitext2']
     for dataset in datasets:
