@@ -84,7 +84,7 @@ class DistillDataCollatorSeq2Seq(object):
             logits.append(torch.tensor(item_dict['logits']))
 
         input_ids = torch.nn.utils.rnn.pad_sequence(
-            input_ids, batch_first=True, padding_value=tokenizer.pad_token_id
+            input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id
         )
         attention_masks =torch.nn.utils.rnn.pad_sequence(
             attention_masks, batch_first=True, padding_value=0

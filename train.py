@@ -204,7 +204,7 @@ def run_train(
     #     model_type = LlamaForCausalLM
     # else:
     #     model_type = AutoModelForCausalLM
-
+    print(model_args.token)
     model = AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         torch_dtype=torch.bfloat16,
@@ -281,24 +281,24 @@ def run_train(
             model_args.model_name_or_path, **tokenizer_kwargs
         )
 
-    if isinstance(tokenizer, transformers.LlamaTokenizer) or isinstance(
-        tokenizer, transformers.LlamaTokenizerFast
-    ):
-        num_added_tokens = tokenizer.add_special_tokens(
-            {
-                "bos_token": "<s>",
-                "eos_token": "</s>",
-                "unk_token": "<unk>",
-                "pad_token": "<pad>",
-            }
-        )
-        assert num_added_tokens in [
-            0,
-            1,
-        ], "LlamaTokenizer should only add one special token - the pad_token, or no tokens if pad token present."
-    else:
-        if not tokenizer.pad_token_id:
-            tokenizer.pad_token = tokenizer.eos_token
+  #  if isinstance(tokenizer, transformers.LlamaTokenizer) or isinstance(
+  #      tokenizer, transformers.LlamaTokenizerFast
+  #  ):
+  #      num_added_tokens = tokenizer.add_special_tokens(
+  #          {
+  #              "bos_token": "<s>",
+  #              "eos_token": "</s>",
+  #              "unk_token": "<unk>",
+  #              "pad_token": "<pad>",
+  #          }
+  #      )
+  #      assert num_added_tokens in [
+  #          0,
+  #          1,
+  #      ], "LlamaTokenizer should only add one special token - the pad_token, or no tokens if pad token present."
+  #  else:
+    if not tokenizer.pad_token_id:
+        tokenizer.pad_token = tokenizer.eos_token
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
@@ -359,10 +359,9 @@ def run_train(
     else:
         lm_datasets = raw_datasets
         if config.data.instruct:
-            data_collator = DistillDataCollatorWithMaskForCausalLM(tokenizer=tokenizer)
+            data_collator = DistillDataCollatorSeq2Seq(tokenizer=tokenizer)
         else:
-            data_collator = DistillDataCollatorSeq2Seq(tokenizer)
-
+            data_collator = DistillDataCollatorWithMaskForCausalLM(tokenizer=tokenizer)
     if config.norm_tweek:
         layernorm_names = [
             f"model.layers.{layer_block_num}.input_layernorm.weight"
