@@ -27,9 +27,14 @@ class DistillTrainer(Trainer):
         else:
             labels = None
         
-        label_mask = inputs["labels"] != -100
+        label_mask = (inputs["labels"] != -100)
         logits = inputs.pop("logits")
-
+        if logits.size(1) != label_mask.size(1):
+            missing = label_mask.size(1) - logits.size(1)
+            logits = torch.cat([logits, torch.zeros(logits.size(0), missing, logits.size(2), device=logits.device)], dim=1)
+            label_mask[:,-missing:] = 0
+            if missing > 1:        
+                print(label_mask.size(), logits.size())
         outputs = model(**inputs)
 
         #https://huggingface.co/docs/transformers/tasks/knowledge_distillation_for_image_classification

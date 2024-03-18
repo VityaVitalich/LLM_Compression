@@ -1,12 +1,11 @@
 #!/bin/bash
 
-MODEL_PATH="/home/cache/llama7b_4w_16a_128fp"
-OUTPUT_PATH="logs/llama7b-4w"
+MODEL_PATH="meta-llama/Llama-2-70b-hf"
+OUTPUT_PATH="logs/Llama-70b"
 
 lm_eval \
 --model hf \
---model_args pretrained=$MODEL_PATH \
---tasks hellaswag,swag,winogrande,boolq,xwinograd_en \
---device cuda:0 \
---batch_size 16 \
+--model_args pretrained=$MODEL_PATH,parallelize=True \
+--tasks hellaswag,winogrande,boolq,ai2_arc,piqa \
+--batch_size 4 \
 --output_path $OUTPUT_PATH
