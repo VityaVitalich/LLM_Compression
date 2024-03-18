@@ -23,6 +23,7 @@ srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trini
     ls;
     cd /home;
     ls;
+    export HF_HOME=/home/cache/;
     export HF_TOKEN=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;
     export SAVING_DIR=/home/cache/;
     export WANDB_API_KEY=2b740bffb4c588c7274a6e8cf4e39bd56344d492;

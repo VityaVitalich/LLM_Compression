@@ -1,0 +1,345 @@
+INFO:    User not listed in /etc/subuid, trying root-mapped namespace
+INFO:    Using fakeroot command combined with root-mapped namespace
+INFO:    underlay of /etc/localtime required more than 50 (89) bind mounts
+clip_sm.sh
+eval_lm.sh
+zh_logs
+LLM_Compression
+LLM_Taxonomy
+ablate.txt
+cache
+data
+food.txt
+images
+output.txt
+outputs
+psy.txt
+tax.txt
+~
+LICENSE
+QUIK
+README.md
+__pycache__
+clip_eval.py
+clip_test.ipynb
+configs
+distill_test.ipynb
+evaluate.sh
+fine_tune.sh
+llm-awq
+llm-tune
+llm-tune-accelerate
+lm-evaluation-harness
+logs
+merge_models.py
+peft
+requirements.txt
+sensitivity
+ste_utils.py
+train.py
+transformers_modified
+wandb
+zh_logs
+zh_scripts
+Mon Feb 19 15:28:10 2024       
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 545.23.08              Driver Version: 545.23.08    CUDA Version: 12.3     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA A100-SXM4-80GB          Off | 00000000:C7:00.0 Off |                    0 |
+| N/A   29C    P0              63W / 400W |      4MiB / 81920MiB |      0%      Default |
+|                                         |                      |             Disabled |
++-----------------------------------------+----------------------+----------------------+
+                                                                                         
++---------------------------------------------------------------------------------------+
+| Processes:                                                                            |
+|  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
+|        ID   ID                                                             Usage      |
+|=======================================================================================|
+|  No running processes found                                                           |
++---------------------------------------------------------------------------------------+
+Package                   Version         Editable project location
+------------------------- --------------- -------------------------------------------
+absl-py                   2.1.0
+accelerate                0.26.1
+aiohttp                   3.9.1
+aiosignal                 1.3.1
+anyio                     4.2.0
+appdirs                   1.4.4
+argon2-cffi               23.1.0
+argon2-cffi-bindings      21.2.0
+arrow                     1.3.0
+asttokens                 2.0.5
+astunparse                1.6.3
+async-lru                 2.0.4
+async-timeout             4.0.3
+attrs                     23.1.0
+Babel                     2.14.0
+backcall                  0.2.0
+beautifulsoup4            4.12.2
+bleach                    6.1.0
+boltons                   23.0.0
+brotlipy                  0.7.0
+cachetools                5.3.2
+certifi                   2023.7.22
+cffi                      1.15.1
+chardet                   4.0.0
+charset-normalizer        2.0.4
+click                     8.0.4
+colorama                  0.4.6
+comm                      0.2.1
+conda                     23.9.0
+conda-build               3.27.0
+conda-content-trust       0.2.0
+conda_index               0.3.0
+conda-libmamba-solver     23.7.0
+conda-package-handling    2.2.0
+conda_package_streaming   0.9.0
+contextlib2               21.6.0
+cryptography              41.0.3
+DataProperty              1.0.1
+datasets                  2.16.1
+debugpy                   1.8.0
+decorator                 5.1.1
+defusedxml                0.7.1
+dill                      0.3.7
+dnspython                 2.4.2
+docker-pycreds            0.4.0
+evaluate                  0.4.1
+exceptiongroup            1.0.4
+executing                 0.8.3
+expecttest                0.1.6
+fastjsonschema            2.19.1
+filelock                  3.9.0
+fqdn                      1.5.1
+frozenlist                1.4.1
+fsspec                    2023.9.2
+gitdb                     4.0.11
+GitPython                 3.1.41
+gmpy2                     2.1.2
+huggingface-hub           0.20.3
+hypothesis                6.87.2
+idna                      3.4
+ipykernel                 6.29.0
+ipython                   8.15.0
+ipywidgets                8.1.1
+isoduration               20.11.0
+jedi                      0.18.1
+Jinja2                    3.1.2
+joblib                    1.3.2
+json5                     0.9.14
+jsonlines                 4.0.0
+jsonpatch                 1.32
+jsonpointer               2.1
+jsonschema                4.21.1
+jsonschema-specifications 2023.12.1
+jupyter                   1.0.0
+jupyter_client            8.6.0
+jupyter-console           6.6.3
+jupyter_core              5.7.1
+jupyter-events            0.9.0
+jupyter-lsp               2.2.2
+jupyter_server            2.12.5
+jupyter_server_terminals  0.5.2
+jupyterlab                4.0.11
+jupyterlab_pygments       0.3.0
+jupyterlab_server         2.25.2
+jupyterlab-widgets        3.0.9
+libarchive-c              2.9
+libmambapy                1.4.1
+lm_eval                   0.4.0           /home/LLM_Compression/lm-evaluation-harness
+lxml                      5.1.0
+MarkupSafe                2.1.1
+matplotlib-inline         0.1.6
+mbstrdecoder              1.1.3
+mistune                   3.0.2
+mkl-fft                   1.3.8
+mkl-random                1.2.4
+mkl-service               2.4.0
+ml-collections            0.1.1
+more-itertools            8.12.0
+mpmath                    1.3.0
+multidict                 6.0.4
+multiprocess              0.70.15
+nbclient                  0.9.0
+nbconvert                 7.14.2
+nbformat                  5.9.2
+nest-asyncio              1.6.0
+networkx                  3.1
+nltk                      3.8.1
+notebook                  7.0.7
+notebook_shim             0.2.3
+numexpr                   2.8.8
+numpy                     1.26.0
+nvidia-ml-py              12.535.133
+nvitop                    1.3.2
+overrides                 7.6.0
+packaging                 23.1
+pandas                    2.2.0
+pandocfilters             1.5.1
+parso                     0.8.3
+pathvalidate              3.2.0
+peft                      0.7.1
+pexpect                   4.8.0
+pickleshare               0.7.5
+Pillow                    10.0.1
+pip                       23.2.1
+pkginfo                   1.9.6
+platformdirs              4.1.0
+pluggy                    1.0.0
+portalocker               2.8.2
+prometheus-client         0.19.0
+prompt-toolkit            3.0.36
+protobuf                  4.25.2
+psutil                    5.9.0
+ptyprocess                0.7.0
+pure-eval                 0.2.2
+pyarrow                   15.0.0
+pyarrow-hotfix            0.6
+pybind11                  2.11.1
+pycosat                   0.6.6
+pycparser                 2.21
+Pygments                  2.15.1
+pyOpenSSL                 23.2.0
+PySocks                   1.7.1
+pytablewriter             1.2.0
+python-dateutil           2.8.2
+python-etcd               0.4.5
+python-json-logger        2.0.7
+pytz                      2023.3.post1
+PyYAML                    6.0
+pyzmq                     25.1.2
+qtconsole                 5.5.1
+QtPy                      2.4.1
+referencing               0.32.1
+regex                     2023.12.25
+requests                  2.31.0
+responses                 0.18.0
+rfc3339-validator         0.1.4
+rfc3986-validator         0.1.1
+rouge-score               0.1.2
+rpds-py                   0.17.1
+ruamel.yaml               0.17.21
+ruamel.yaml.clib          0.2.6
+sacrebleu                 2.4.0
+safetensors               0.4.2
+scikit-learn              1.4.0
+scipy                     1.12.0
+Send2Trash                1.8.2
+sentry-sdk                1.39.2
+setproctitle              1.3.3
+setuptools                68.0.0
+six                       1.16.0
+smmap                     5.0.1
+sniffio                   1.3.0
+sortedcontainers          2.4.0
+soupsieve                 2.5
+sqlitedict                2.1.0
+stack-data                0.2.0
+sympy                     1.11.1
+tabledata                 1.3.3
+tabulate                  0.9.0
+tcolorpy                  0.1.4
+termcolor                 2.4.0
+terminado                 0.18.0
+threadpoolctl             3.2.0
+tinycss2                  1.2.1
+tokenizers                0.15.1
+tomli                     2.0.1
+toolz                     0.12.0
+torch                     2.1.0
+torchaudio                2.1.0
+torchelastic              0.2.2
+torchvision               0.16.0
+tornado                   6.4
+tqdm                      4.65.0
+tqdm-multiprocess         0.0.11
+traitlets                 5.7.1
+transformers              4.38.0.dev0     /home/LLM_Compression/transformers_modified
+triton                    2.1.0
+truststore                0.8.0
+typepy                    1.3.2
+types-dataclasses         0.6.6
+types-python-dateutil     2.8.19.20240106
+typing_extensions         4.7.1
+tzdata                    2023.4
+uri-template              1.3.0
+urllib3                   1.26.16
+wandb                     0.16.2
+wcwidth                   0.2.5
+webcolors                 1.13
+webencodings              0.5.1
+websocket-client          1.7.0
+wheel                     0.41.2
+widgetsnbextension        4.0.9
+xxhash                    3.4.1
+yarl                      1.9.4
+zstandard                 0.19.0
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards:  33%|███▎      | 1/3 [00:10<00:20, 10.05s/it]Loading checkpoint shards:  67%|██████▋   | 2/3 [00:19<00:09,  9.86s/it]Loading checkpoint shards: 100%|██████████| 3/3 [00:26<00:00,  8.47s/it]Loading checkpoint shards: 100%|██████████| 3/3 [00:26<00:00,  8.86s/it]
+32000 32000
+Running tokenizer on dataset:   0%|          | 0/4358 [00:00<?, ? examples/s]Running tokenizer on dataset:  69%|██████▉   | 3000/4358 [00:00<00:00, 18779.40 examples/s]Running tokenizer on dataset: 100%|██████████| 4358/4358 [00:00<00:00, 20079.71 examples/s]
+Running tokenizer on dataset:   0%|          | 0/3671 [00:00<?, ? examples/s]Running tokenizer on dataset:  54%|█████▍    | 2000/3671 [00:00<00:00, 13128.64 examples/s]Running tokenizer on dataset: 100%|██████████| 3671/3671 [00:00<00:00, 14614.86 examples/s]Running tokenizer on dataset: 100%|██████████| 3671/3671 [00:00<00:00, 14190.24 examples/s]
+Running tokenizer on dataset:   0%|          | 0/376 [00:00<?, ? examples/s]Running tokenizer on dataset: 100%|██████████| 376/376 [00:00<00:00, 11866.59 examples/s]
+1024
+Grouping texts in chunks of 1024:   0%|          | 0/4358 [00:00<?, ? examples/s]Grouping texts in chunks of 1024:  46%|████▌     | 2000/4358 [00:00<00:00, 11362.91 examples/s]Grouping texts in chunks of 1024:  92%|█████████▏| 4000/4358 [00:00<00:00, 11923.67 examples/s]Grouping texts in chunks of 1024: 100%|██████████| 4358/4358 [00:00<00:00, 11809.72 examples/s]
+Grouping texts in chunks of 1024:   0%|          | 0/3671 [00:00<?, ? examples/s]Grouping texts in chunks of 1024:  54%|█████▍    | 2000/3671 [00:00<00:00, 12098.49 examples/s]Grouping texts in chunks of 1024: 100%|██████████| 3671/3671 [00:00<00:00, 12266.10 examples/s]Grouping texts in chunks of 1024: 100%|██████████| 3671/3671 [00:00<00:00, 12132.22 examples/s]
+Grouping texts in chunks of 1024:   0%|          | 0/376 [00:00<?, ? examples/s]Grouping texts in chunks of 1024: 100%|██████████| 376/376 [00:00<00:00, 10485.69 examples/s]
+Detected kernel version 5.4.265, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+wandb: Currently logged in as: vityavitalich. Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.16.3 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.16.2
+wandb: Run data is saved locally in /home/LLM_Compression/wandb/run-20240219_152856-1sx03w2y
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run test_ste_nans
+wandb: ⭐️ View project at https://wandb.ai/vityavitalich/huggingface
+wandb: 🚀 View run at https://wandb.ai/vityavitalich/huggingface/runs/1sx03w2y
+trainable_params: 6739525632
+  0%|          | 0/17 [00:00<?, ?it/s]Traceback (most recent call last):
+  File "/home/LLM_Compression/train.py", line 641, in <module>
+    main()
+  File "/home/LLM_Compression/train.py", line 637, in main
+    run_train(model_args, data_args, training_args, config)
+  File "/home/LLM_Compression/train.py", line 570, in run_train
+    train_result = trainer.train()
+  File "/home/LLM_Compression/transformers_modified/src/transformers/trainer.py", line 1542, in train
+    return inner_training_loop(
+  File "/home/LLM_Compression/transformers_modified/src/transformers/trainer.py", line 1872, in _inner_training_loop
+    tr_loss_step = self.training_step(model, inputs)
+  File "/home/LLM_Compression/transformers_modified/src/transformers/trainer.py", line 2773, in training_step
+    loss = self.compute_loss(model, inputs)
+  File "/home/LLM_Compression/transformers_modified/src/transformers/trainer.py", line 2796, in compute_loss
+    outputs = model(**inputs)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/LLM_Compression/transformers_modified/src/transformers/models/llama/modeling_llama.py", line 1708, in forward
+    outputs = self.model(
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/LLM_Compression/transformers_modified/src/transformers/models/llama/modeling_llama.py", line 1555, in forward
+    layer_outputs = decoder_layer(
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/LLM_Compression/transformers_modified/src/transformers/models/llama/modeling_llama.py", line 1204, in forward
+    hidden_states, self_attn_weights, present_key_value = self.self_attn(
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/opt/conda/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/LLM_Compression/transformers_modified/src/transformers/models/llama/modeling_llama.py", line 722, in forward
+    attn_weights = torch.matmul(
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 512.00 MiB. GPU 0 has a total capacty of 79.15 GiB of which 412.12 MiB is free. Including non-PyTorch memory, this process has 78.73 GiB memory in use. Of the allocated memory 75.84 GiB is allocated by PyTorch, and 2.40 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting max_split_size_mb to avoid fragmentation.  See documentation for Memory Management and PYTORCH_CUDA_ALLOC_CONF
+wandb: - 0.014 MB of 0.014 MB uploadedwandb: \ 0.014 MB of 0.014 MB uploadedwandb: | 0.014 MB of 0.014 MB uploadedwandb: / 0.014 MB of 0.014 MB uploadedwandb: - 0.203 MB of 0.588 MB uploaded (0.185 MB deduped)wandb: \ 0.203 MB of 0.588 MB uploaded (0.185 MB deduped)wandb: | 0.588 MB of 0.588 MB uploaded (0.185 MB deduped)wandb: 🚀 View run test_ste_nans at: https://wandb.ai/vityavitalich/huggingface/runs/1sx03w2y
+wandb: ️⚡ View job at https://wandb.ai/vityavitalich/huggingface/jobs/QXJ0aWZhY3RDb2xsZWN0aW9uOjEzNzIzNzIyMQ==/version_details/v10
+wandb: Synced 6 W&B file(s), 0 media file(s), 2 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20240219_152856-1sx03w2y/logs
+srun: error: gn29: task 0: Exited with exit code 1
