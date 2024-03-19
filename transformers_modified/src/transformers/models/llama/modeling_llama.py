@@ -410,7 +410,7 @@ class BitNoiseQuant(nn.Module):
         if self.noise_type == 'normal':
             noise = torch.randn_like(w, requires_grad=False) / 2
         elif self.noise_type == 'uniform':
-            noise = torch.rand_like(w, requires_grad=False) / 2
+            noise = torch.rand_like(w, requires_grad=False) - 0.5
 
         w_rand = noise * delta
 
