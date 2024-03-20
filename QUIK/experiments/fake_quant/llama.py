@@ -400,7 +400,7 @@ if __name__ == '__main__':
 
     save_path = args.path_to_save_quant_model
     model.save_pretrained(save_path)
-
+    torch.save(save_dict, f"{save_path}/quantazed_model.pt")
     datasets = ['wikitext2']
     for dataset in datasets:
         dataloader, testloader = datautils.get_loaders(
