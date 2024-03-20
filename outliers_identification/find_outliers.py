@@ -395,7 +395,6 @@ def get_weight_scales(model, tokenizer, data_args, bit):
             estimators[name] = estimator
 
     for i in tqdm(range(num_samples)):
-        print(i)
         input_ids = tokenizer(
             dataset[i]["text"], return_tensors="pt", max_length=seq_len, truncation=True
         ).input_ids.to(device)
