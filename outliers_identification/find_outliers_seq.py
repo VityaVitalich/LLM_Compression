@@ -386,9 +386,10 @@ class OBS_estimator:
         self.nsamples += tmp
         inp = np.sqrt(2 / self.nsamples) * inp.float()
         
-        if torch.cuda.is_available:
-            inp = inp.to('cuda')
+        # if torch.cuda.is_available:
+        #     inp = inp.to('cuda')
         
+        # out = inp.matmul(inp.t()).to('cpu')
         out = inp.matmul(inp.t()).to('cpu')
         self.H += out
         # inp = inp.to('cpu')
