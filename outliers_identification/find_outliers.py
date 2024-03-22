@@ -278,7 +278,7 @@ class SymQuant:
             qmin = self.qmin
 
         alpha = alpha.flatten()
-        delta = alpha / self.qmax
+        delta = alpha / qmax
         q = torch.round(w / delta)
         q = torch.clamp(q, qmin, qmax)
 
