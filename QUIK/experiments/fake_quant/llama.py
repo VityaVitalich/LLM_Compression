@@ -10,7 +10,13 @@ import torch
 import quik_utils
 import quant
 import sparseGPT_utils
+import types
+import torch.nn.functional as F
 DEV = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+funcType = types.MethodType
+
+def unquantized_forward(self, input: torch.Tensor) -> torch.Tensor:
+    return F.linear(input, self.weight, self.bias)
 
 def llama_parser():
     parser = argparse.ArgumentParser()
@@ -207,8 +213,16 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 if 'down_proj' in name:
                     if args.int8_down_proj:
                         current_w_bits = 8
+
+                if getattr(subset[name], 'quantizer', False):
+                    ste_scales = subset[name].quantizer.s.detach()
+                    # replace with regular forward to not perform quantization on forward
+                    subset[name].forward = funcType(unquantized_forward, subset[name])
+                else:
+                    ste_scales = None
+                
                 modules_quik[name].quantizer.configure(
-                    current_w_bits, perchannel=True, sym=not(args.w_asym), mse=args.w_clip
+                    current_w_bits, perchannel=True, sym=not(args.w_asym), mse=args.w_clip, scales=ste_scales
                 )
 
             def add_batch(name):
