@@ -7,7 +7,7 @@ def model_configs():
     ### DATASET ###
     data = config.data = ml_collections.ConfigDict()
     data.dataset_path = "/home/LLM_compression/outliers_identification/datasets/val.jsonl.zst"
-    data.output_path = "/home/LLM_compression/outliers_identification/weight_scales/llama7b_obs_scales.pt"
+    data.output_path = "/home/LLM_compression/outliers_identification/weight_scales/llama7b_obs_scales_test.pt"
     data.max_seq_length = 512
     data.num_samples = 3
     data.trust_remote_code = True
