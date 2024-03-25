@@ -185,28 +185,28 @@ def get_model_and_tokenizer(model_args):
 
     return model, tokenizer
 
-# def get_dataloader(data_args, tokenizer):
-#     dataset_path = data_args.dataset_path
-#     num_samples = data_args.num_samples
-#     seq_len = data_args.max_seq_length
+def get_dataloader(data_args, tokenizer):
+    dataset_path = data_args.dataset_path
+    num_samples = data_args.num_samples
+    seq_len = data_args.max_seq_length
 
-#     dataset = load_dataset("json", data_files=dataset_path, split="train")
-#     dataset = dataset.shuffle(seed=42)
+    dataset = load_dataset("json", data_files=dataset_path, split="train")
+    dataset = dataset.shuffle(seed=42)
 
-#     dataloader = []
-#     for i in tqdm(range(num_samples)):
-#         if tokenizer.pad_token is None:
-#             tokenizer.pad_token = tokenizer.eos_token
+    dataloader = []
+    for i in tqdm(range(num_samples)):
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
 
-#         input_ids = tokenizer(
-#             dataset[i]["text"], return_tensors="pt", 
-#             max_length=seq_len, truncation=True,
-#             padding="max_length" 
-#         ).input_ids
-#         target_ids = input_ids.clone()
-#         target_ids[:, :-1] = -100
-#         dataloader.append((input_ids, target_ids))
-    # return dataloader
+        input_ids = tokenizer(
+            dataset[i]["text"], return_tensors="pt", 
+            max_length=seq_len, truncation=True,
+            padding="max_length" 
+        ).input_ids
+        target_ids = input_ids.clone()
+        target_ids[:, :-1] = -100
+        dataloader.append((input_ids, target_ids))
+    return dataloader
 
 def get_wikitext2(data_args, tokenizer):
     nsamples = data_args.num_samples
@@ -390,7 +390,7 @@ class OBS_estimator:
         #     inp = inp.to('cuda')
         
         # out = inp.matmul(inp.t()).to('cpu')
-        out = inp.matmul(inp.t()).to('cpu')
+        out = inp.matmul(inp.t())
         self.H += out
         # inp = inp.to('cpu')
     
@@ -427,9 +427,12 @@ class OBS_estimator:
             w = W[:, i]
             d = Hinv[i, i]
             
-            w_dq = self.quantizer.quantize(w, dequantize=True)
+            if self.quantizer is not None:
+                w_dq = self.quantizer.quantize(w, dequantize=True)
+                Loss = (w - w_dq).dot((w - w_dq)) / d**2
+            else:
+                Loss = w.dot(w) / d**2
             
-            Loss = (w - w_dq).dot((w - w_dq)) / d ** 2
             Losses[i] = Loss / 2
 
         Losses = Losses.cpu()
@@ -437,9 +440,10 @@ class OBS_estimator:
 
 
 @torch.no_grad()
-def llama_sequential(model, dataloader, data_args):
+def llama_sequential(model, dataloader, data_args, estimator_args):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     nsamples = data_args.num_samples
+    bit = estimator_args['bit']
     use_cache = model.config.use_cache
     model.config.use_cache = False
     layers = model.model.layers
@@ -511,9 +515,10 @@ def llama_sequential(model, dataloader, data_args):
                     name=name, ncolumns=ncolumns, device=device
                 )
 
-                w = lin_layer.weight
-                bit = 4
-                estimator.add_sym_quantizer(w, bit)
+                if estimator_args['add_quantizer']:
+                    w = lin_layer.weight
+                    estimator.add_sym_quantizer(w, bit)
+                
                 estimators[name] = estimator
 
             def add_batch(name):
@@ -529,7 +534,11 @@ def llama_sequential(model, dataloader, data_args):
                 h.remove()
 
             for name in subset:
+                lin_layer = subset[name]
+                w = lin_layer.weight
+
                 estimator = estimators[name]
+
                 losses = estimator.compute_stat(w)
                 weight_stats[f'model.layers.{i}.{name}'] = losses
                 # del estimator
@@ -553,6 +562,7 @@ def run_outliers_search(config):
 
     config_dict = dict(config)
     config_dict['data'] = dict(config_dict['data'])
+    config_dict['estimator'] = dict(config_dict['estimator'])
     config = config_dict
 
     data_args = DataArguments(
@@ -570,13 +580,15 @@ def run_outliers_search(config):
         token = config['token'], #None
     )
 
+    estimator_args = config['estimator']
+
     model, tokenizer = get_model_and_tokenizer(model_args)
 
     # dataloader = get_dataloader(data_args, tokenizer)
     dataloader = get_wikitext2(data_args, tokenizer)
     
 
-    weight_stats = llama_sequential(model, dataloader, data_args)
+    weight_stats = llama_sequential(model, dataloader, data_args, estimator_args)
 
 
     # weight_stats = get_weight_scales(
@@ -589,6 +601,7 @@ def run_outliers_search(config):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(weight_stats, output_path)
 
+    print(f'weight_stats have been saved in {output_path}', flush=True)
 
 def main():
     parser = ArgumentParser()
