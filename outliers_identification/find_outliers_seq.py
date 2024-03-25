@@ -342,7 +342,7 @@ class SymQuant:
         qmax = self.qmax
         qmin = self.qmin
 
-        alpha = alpha.flatten()
+        # alpha = alpha.flatten()
         delta = alpha / qmax
         q = torch.round(w / delta)
         q = torch.clamp(q, qmin, qmax)
@@ -352,7 +352,7 @@ class SymQuant:
 
         return q
 
-class OBS_estimator:
+class OBS_Estimator:
     def __init__(
         self,
         name,
@@ -377,10 +377,9 @@ class OBS_estimator:
         
         # if len(inp.shape) == 3:
         #     inp = inp.reshape((-1, inp.shape[-1]))
-        
-        inp = inp.reshape((-1, inp.shape[-1]))
-        tmp = inp.shape[0]    
-        inp = inp.t()
+        tmp = inp.shape[0]
+        inp = inp.reshape((-1, inp.shape[-1]))    
+        inp = inp.t() #transpose to match computing with analytical formulas
 
         self.H *= self.nsamples / (self.nsamples + tmp)
         self.nsamples += tmp
@@ -424,19 +423,134 @@ class OBS_estimator:
         #     W = W.to('cuda')
 
         for i in range(0, self.ncolumns):
-            w = W[:, i]
+            w = W[:, i].unsqueeze(1)
             d = Hinv[i, i]
             
             if self.quantizer is not None:
                 w_dq = self.quantizer.quantize(w, dequantize=True)
-                Loss = (w - w_dq).dot((w - w_dq)) / d**2
+                Loss = torch.matmul((w - w_dq).t(), (w - w_dq)) / d**2
             else:
-                Loss = w.dot(w) / d**2
+                Loss = torch.matmul(w.t(), w) / d**2
             
-            Losses[i] = Loss / 2
+            Losses[i] = Loss[0] / 2
 
         Losses = Losses.cpu()
         return Losses
+
+class Wanda_Estimator:
+    def __init__(
+        self,
+        name,
+        ncolumns,
+        device,
+        agg
+    ):   
+        self.name = name
+        self.ncolumns = ncolumns
+        self.device = device
+        self.percdamp = .01
+        self.agg = agg #'l2', 'max' 
+        self.scaler_row = torch.zeros(self.ncolumns, device=self.device)
+        self.nsamples = 0
+        self.quantizer = None
+    
+    def add_sym_quantizer(self, weight, bit):
+        self.quantizer = SymQuant(out_features=self.ncolumns, bit=bit)
+        self.quantizer.compute_alpha_scale(weight)
+
+    def add_batch(self, inp, *args):
+        tmp = inp.shape[0]
+        inp = inp.reshape((-1, inp.shape[-1]))
+        inp = inp.t()
+
+        self.scaler_row *= self.nsamples / (self.nsamples+tmp)
+        self.nsamples += tmp
+
+        inp = inp.type(torch.float32)
+        self.scaler_row += torch.norm(inp, p=2, dim=1)**2  / self.nsamples
+             
+    def compute_stat(self, w):
+
+        if self.quantizer is not None:
+            w_dq = self.quantizer.quantize(w, dequantize=True)
+            activation_data = torch.sqrt(self.scaler_row.reshape((1,-1)))
+            Loss = torch.abs(w - w_dq) * activation_data
+        else:
+            Loss = torch.abs(w) * activation_data
+
+        if self.agg == 'l2':
+            Loss = torch.norm(Loss, p=2, dim=0)
+        elif self.agg == 'max':
+            Loss = torch.max(Loss, dim=0)[0]
+        
+        return Loss
+        
+
+
+# class Output_Estimator:
+#     def __init__(
+#         self,
+#         name,
+#         nrows,
+#         ncolumns,
+#         device,
+#         agg
+#     ):
+#         self.name = name
+#         self.nrows = nrows
+#         self.ncolumns = ncolumns
+#         self.device = device
+#         self.percdamp = .01
+#         self.agg = agg #'l2', 'max' 
+#         self.Losses = torch.zeros(self.nrows, device=self.device)
+#         self.nsamples = 0
+#         self.quantizer = None
+
+#     def add_sym_quantizer(self, weight, bit):
+#         self.quantizer = SymQuant(out_features=self.ncolumns, bit=bit)
+#         self.quantizer.compute_alpha_scale(weight)
+    
+#     def compute_loss(self, tmp, out, out_dq=None):
+#         if self.agg == 'l2':
+#             self.Losses *= self.nsamples / (self.nsamples+tmp)
+#             self.nsamples += tmp
+
+#             if out_dq is None:
+#                 self.Losses += torch.norm(out, p=2, dim=0) / self.nsamples
+#             else:
+#                 self.Losses += torch.norm((out - out_dq), p=2, dim=0) / self.nsamples
+        
+#         elif self.agg == 'max':
+#             if out_dq is None:
+#                 loss = torch.vstack([torch.abs(out), self.Losses])
+#                 self.Losses = torch.max(loss, dim=0)[0]
+#             else:
+#                 loss = torch.vstack([torch.abs(out - out_dq), self.Losses])
+#                 self.Losses = torch.max(loss, dim=0)[0]
+
+#     def add_batch(self, inp, out, l): 
+#         tmp = inp.shape[0]
+#         w = l.weight
+
+#         inp = inp.reshape((-1, inp.shape[-1]))
+#         # out = out.reshape((-1, out.shape[-1]))
+#         inp_nrows = inp.shape[0]
+#         out_w = torch.zeros((inp_nrows, self.ncolumns), device=self.device)
+#         for i in range(inp_nrows):
+#             out_w = inp[i] * w
+
+#         if self.quantizer is not None:
+            
+#             w_dq = self.quantizer.quantize(w, dequantize=True)
+#             out_dq = F.linear(inp, w_dq)
+#             # Loss = (out - out_dq) * (out - out_dq)
+#             # Loss = torch.mean(Loss, dim=0)
+#             self.compute_loss(tmp, out, out_dq)
+#         else:
+#             self.compute_loss(tmp, out)
+
+#     def compute_stat(self, *args):
+#         return self.Losses.cpu()
 
 
 @torch.no_grad()
@@ -509,21 +623,32 @@ def llama_sequential(model, dataloader, data_args, estimator_args):
                 print(f'{name}', end='  ', flush=True)
                 
                 lin_layer = subset[name]
-
+                nrows = lin_layer.weight.shape[0]
                 ncolumns = lin_layer.weight.shape[1]
-                estimator = OBS_estimator(
-                    name=name, ncolumns=ncolumns, device=device
-                )
+                if estimator_args['estimator'] == 'OBS_Estimator':
+                    estimator = OBS_Estimator(
+                        name=name, ncolumns=ncolumns, device=device
+                    )
+                elif estimator_args['estimator'] == 'Wanda_Estimator':
+                    agg = estimator_args['agg']
+                    estimator = Wanda_Estimator(
+                        name=name, ncolumns=ncolumns, device=device, agg=agg
+                    )                    
+                # elif estimator_args['estimator'] == 'Output_Estimator':
+                #     agg = estimator_args['agg']
+                #     estimator = Output_Estimator(
+                #         name=name, nrows=nrows, ncolumns=ncolumns, device=device, agg=agg
+                #     )
 
                 if estimator_args['add_quantizer']:
                     w = lin_layer.weight
                     estimator.add_sym_quantizer(w, bit)
-                
+
                 estimators[name] = estimator
 
             def add_batch(name):
                 def tmp(l, inp, out):
-                    estimators[name].add_batch(inp[0].data, out.data)
+                    estimators[name].add_batch(inp[0].data, out.data, l)
                 return tmp
             handles = []
             for name in subset:
