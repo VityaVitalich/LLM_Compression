@@ -20,7 +20,12 @@ def model_configs():
     config.use_fast_tokenizer = True
     config.trust_remote_code = True
 
-    ### Quantization ###
-    config.bit = 4
+    ### OBS_estimator ###
+    config.estimator = {
+        'estimator':'Wanda_Estimator', #'OBS_Estimator',
+        'agg': 'max',
+        'add_quantizer': True,
+        'bit': 4
+    }
 
     return config
