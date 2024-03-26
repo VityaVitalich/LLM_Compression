@@ -470,10 +470,10 @@ class Wanda_Estimator:
         self.scaler_row += torch.norm(inp, p=2, dim=1)**2  / self.nsamples
              
     def compute_stat(self, w):
+        activation_data = torch.sqrt(self.scaler_row.reshape((1,-1)))
 
         if self.quantizer is not None:
             w_dq = self.quantizer.quantize(w, dequantize=True)
-            activation_data = torch.sqrt(self.scaler_row.reshape((1,-1)))
             Loss = torch.abs(w - w_dq) * activation_data
         else:
             Loss = torch.abs(w) * activation_data
@@ -482,6 +482,8 @@ class Wanda_Estimator:
             Loss = torch.norm(Loss, p=2, dim=0)
         elif self.agg == 'max':
             Loss = torch.max(Loss, dim=0)[0]
+
+        Loss = Loss.cpu()
         
         return Loss
         
