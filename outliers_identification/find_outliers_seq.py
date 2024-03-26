@@ -459,21 +459,26 @@ class Wanda_Estimator:
         self.quantizer.compute_alpha_scale(weight)
 
     def add_batch(self, inp, *args):
-        tmp = inp.shape[0]
+        # tmp = inp.shape[0]
+        # inp = inp.reshape((-1, inp.shape[-1]))
+        # inp = inp.t()
+
+        # self.scaler_row *= self.nsamples / (self.nsamples+tmp)
+        # self.nsamples += tmp
+
+        # inp = inp.type(torch.float32)
+        # self.scaler_row += torch.norm(inp, p=2, dim=1)**2  / self.nsamples
+
         inp = inp.reshape((-1, inp.shape[-1]))
-        inp = inp.t()
-
-        self.scaler_row *= self.nsamples / (self.nsamples+tmp)
-        self.nsamples += tmp
-
         inp = inp.type(torch.float32)
-        self.scaler_row += torch.norm(inp, p=2, dim=1)**2  / self.nsamples
+        inp_union = torch.vstack([inp, self.scaler_row])
+        self.scaler_row = torch.max(inp_union, dim=0)[0]
              
     def compute_stat(self, w):
+        activation_data = torch.sqrt(self.scaler_row.reshape((1,-1)))
 
         if self.quantizer is not None:
             w_dq = self.quantizer.quantize(w, dequantize=True)
-            activation_data = torch.sqrt(self.scaler_row.reshape((1,-1)))
             Loss = torch.abs(w - w_dq) * activation_data
         else:
             Loss = torch.abs(w) * activation_data
@@ -482,6 +487,8 @@ class Wanda_Estimator:
             Loss = torch.norm(Loss, p=2, dim=0)
         elif self.agg == 'max':
             Loss = torch.max(Loss, dim=0)[0]
+
+        Loss = Loss.cpu()
         
         return Loss
         
@@ -673,7 +680,7 @@ def llama_sequential(model, dataloader, data_args, estimator_args):
 
         layers[i] = decoder_layer.cpu()
         del decoder_layer
-        del estimators 
+        del estimators
         torch.cuda.empty_cache()
 
         inps, outs = outs, inps
