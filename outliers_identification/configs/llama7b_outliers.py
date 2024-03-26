@@ -22,7 +22,7 @@ def model_configs():
 
     ### OBS_estimator ###
     config.estimator = {
-        'estimator':'Wanda_Estimator', #'OBS_Estimator',
+        'estimator':'OBS_Estimator', #'OBS_Estimator', 'Wanda_Estimator'
         'agg': 'max',
         'add_quantizer': True,
         'bit': 4
