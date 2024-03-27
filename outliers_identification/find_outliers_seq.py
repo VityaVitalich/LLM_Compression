@@ -491,22 +491,28 @@ class Wanda_Estimator:
         
         return Loss
         
-# class Activation_Estimator:
-#     def __init__(
-#         self,
-#         name,
-#         ncolumns,
-#         device,
-#         agg
-#     ):
-#         self.name = name
-#         self.ncolumns = ncolumns
-#         self.device = device
-#         self.percdamp = .01
-#         self.agg = agg #'l2', 'max' 
-#         self.scaler_row = torch.zeros(self.ncolumns, device=self.device)
-#         self.nsamples = 0
-#         self.quantizer = None
+class Activation_Estimator:
+    def __init__(
+        self,
+        name,
+        ncolumns,
+        device
+    ):
+        self.name = name
+        self.ncolumns = ncolumns
+        self.device = device
+        self.scaler_row = torch.zeros(self.ncolumns, device=self.device)
+        self.nsamples = 0
+        self.quantizer = None
+
+    def add_batch(self, inp, *args):
+        inp = inp.reshape((-1, inp.shape[-1]))
+        inp = inp.type(torch.float32).abs()
+        inp_union = torch.vstack([inp, self.scaler_row])
+        self.scaler_row = torch.max(inp_union, dim=0)[0]
+    
+    def compute_stat(self, *args):
+        return self.scaler_row.cpu()
     
 
 # class Output_Estimator:
@@ -655,7 +661,11 @@ def llama_sequential(model, dataloader, data_args, estimator_args):
                     agg = estimator_args['agg']
                     estimator = Wanda_Estimator(
                         name=name, ncolumns=ncolumns, device=device, agg=agg
-                    )                    
+                    ) 
+                elif estimator_args['estimator'] == 'Activation_Estimator':
+                    estimator = Activation_Estimator(
+                        name=name, ncolumns=ncolumns, device=device
+                    )  
                 # elif estimator_args['estimator'] == 'Output_Estimator':
                 #     agg = estimator_args['agg']
                 #     estimator = Output_Estimator(
@@ -731,8 +741,8 @@ def run_outliers_search(config):
 
     model, tokenizer = get_model_and_tokenizer(model_args)
 
-    # dataloader = get_dataloader(data_args, tokenizer)
-    dataloader = get_wikitext2(data_args, tokenizer)
+    dataloader = get_dataloader(data_args, tokenizer)
+    # dataloader = get_wikitext2(data_args, tokenizer)
     
 
     weight_stats = llama_sequential(model, dataloader, data_args, estimator_args)
@@ -748,6 +758,7 @@ def run_outliers_search(config):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(weight_stats, output_path)
 
+    print('', flush=True)
     print(f'weight_stats have been saved in {output_path}', flush=True)
 
 def main():

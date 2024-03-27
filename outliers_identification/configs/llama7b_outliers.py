@@ -7,9 +7,9 @@ def model_configs():
     ### DATASET ###
     data = config.data = ml_collections.ConfigDict()
     data.dataset_path = "/home/LLM_compression/outliers_identification/datasets/val.jsonl.zst"
-    data.output_path = "/home/LLM_compression/outliers_identification/weight_scales/llama7b_obs_scales_test.pt"
+    data.output_path = "/home/LLM_compression/outliers_identification/weight_scales/llama7b_act_scales_ptb.pt"
     data.max_seq_length = 512
-    data.num_samples = 3
+    data.num_samples = 512
     data.trust_remote_code = True
     data.preprocessing_num_workers = 8
 
@@ -22,10 +22,10 @@ def model_configs():
 
     ### OBS_estimator ###
     config.estimator = {
-        'estimator':'OBS_Estimator', #'OBS_Estimator', 'Wanda_Estimator'
+        'estimator':'Activation_Estimator', #'OBS_Estimator', 'Wanda_Estimator', 'Activation_Estimator'
         'agg': 'max',
-        'add_quantizer': True,
-        'bit': 2
+        'add_quantizer': False,
+        'bit': 0
     }
 
     return config
