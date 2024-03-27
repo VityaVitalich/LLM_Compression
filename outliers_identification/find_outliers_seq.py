@@ -373,21 +373,21 @@ class OBS_Estimator:
         self.quantizer.compute_alpha_scale(weight)
 
     def add_batch(self, inp, *args):
-        tmp = inp.shape[0]
-        inp = inp.reshape((-1, inp.shape[-1]))    
-        inp = inp.t() #transpose to match computing with analytical formulas
+        # tmp = inp.shape[0]
+        # inp = inp.reshape((-1, inp.shape[-1]))    
+        # inp = inp.t() #transpose to match computing with analytical formulas
 
-        self.H *= self.nsamples / (self.nsamples + tmp)
-        self.nsamples += tmp
-        inp = np.sqrt(2 / self.nsamples) * inp.float()
+        # self.H *= self.nsamples / (self.nsamples + tmp)
+        # self.nsamples += tmp
+        # inp = np.sqrt(2 / self.nsamples) * inp.float()
         
-        out = inp.matmul(inp.t())
-        self.H += out
+        # out = inp.matmul(inp.t())
+        # self.H += out
 
-        # inp = inp.reshape((-1, inp.shape[-1]))
-        # inp = inp.type(torch.float32)
-        # inp_union = torch.vstack([inp, self.scaler_row])
-        # self.scaler_row = torch.max(inp_union, dim=0)[0]
+        inp = inp.reshape((-1, inp.shape[-1]))
+        inp = inp.type(torch.float32).abs()
+        inp_union = torch.vstack([inp, self.scaler_row])
+        self.scaler_row = torch.max(inp_union, dim=0)[0]
     
     def invert_H(self):
         H = self.H.to(self.device)
@@ -406,8 +406,8 @@ class OBS_Estimator:
         return Hinv, dead
 
     def compute_stat(self, weight):
-        # activation_data = self.scaler_row.reshape((1,-1))
-        # self.H = torch.matmul(activation_data.t(), activation_data)
+        activation_data = self.scaler_row.reshape((1,-1))
+        self.H = torch.matmul(activation_data.t(), activation_data)
 
         Hinv, dead = self.invert_H()
 
@@ -458,20 +458,20 @@ class Wanda_Estimator:
         self.quantizer.compute_alpha_scale(weight)
 
     def add_batch(self, inp, *args):
-        tmp = inp.shape[0]
-        inp = inp.reshape((-1, inp.shape[-1]))
-        inp = inp.t()
-
-        self.scaler_row *= self.nsamples / (self.nsamples+tmp)
-        self.nsamples += tmp
-
-        inp = inp.type(torch.float32)
-        self.scaler_row += torch.norm(inp, p=2, dim=1)**2  / self.nsamples
-
+        # tmp = inp.shape[0]
         # inp = inp.reshape((-1, inp.shape[-1]))
+        # inp = inp.t()
+
+        # self.scaler_row *= self.nsamples / (self.nsamples+tmp)
+        # self.nsamples += tmp
+
         # inp = inp.type(torch.float32)
-        # inp_union = torch.vstack([inp, self.scaler_row])
-        # self.scaler_row = torch.max(inp_union, dim=0)[0]
+        # self.scaler_row += torch.norm(inp, p=2, dim=1)**2  / self.nsamples
+
+        inp = inp.reshape((-1, inp.shape[-1]))
+        inp = inp.type(torch.float32).abs()
+        inp_union = torch.vstack([inp, self.scaler_row])
+        self.scaler_row = torch.max(inp_union, dim=0)[0]
              
     def compute_stat(self, w):
         activation_data = torch.sqrt(self.scaler_row.reshape((1,-1)))
@@ -491,7 +491,23 @@ class Wanda_Estimator:
         
         return Loss
         
-
+# class Activation_Estimator:
+#     def __init__(
+#         self,
+#         name,
+#         ncolumns,
+#         device,
+#         agg
+#     ):
+#         self.name = name
+#         self.ncolumns = ncolumns
+#         self.device = device
+#         self.percdamp = .01
+#         self.agg = agg #'l2', 'max' 
+#         self.scaler_row = torch.zeros(self.ncolumns, device=self.device)
+#         self.nsamples = 0
+#         self.quantizer = None
+    
 
 # class Output_Estimator:
 #     def __init__(
