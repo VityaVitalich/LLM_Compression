@@ -472,6 +472,7 @@ def main():
         per_device_eval_batch_size=config.per_device_eval_batch_size,  # 2,
         gradient_accumulation_steps=config.gradient_accumulation_steps,  # 16,
         gradient_checkpointing=config.gradient_checkpointing,  # False,
+        max_steps=config.max_steps,
         save_strategy=config.save_strategy,
         save_steps=config.save_steps,
         evaluation_strategy=config.evaluation_strategy,

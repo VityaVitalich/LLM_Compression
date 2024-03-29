@@ -30,6 +30,6 @@ srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trini
     cd /home/LLM_Compression/QUIK/experiments/fake_quant;
     nvidia-smi;
     pip list;
-    python llama.py --model meta-llama/Llama-2-13b-hf --path_to_act_scales /home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-13b-hf.pt --path_to_save_quant_model /home/cache/Llama13b_4bit_128fp --fp_features 128 --a_bits 16 --w_bits 4 --w_clip --dataset wikitext2 --hf_token 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;
+    python llama.py --model /home/LLM_Compression/logs/fine_tuning/full/Llama13b_lima/checkpoint-363 --path_to_act_scales /home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-13b-hf.pt --path_to_save_quant_model /home/cache/Llama13b_4bit_128fp_lima_363 --fp_features 128 --a_bits 16 --w_bits 4 --w_clip --dataset wikitext2 --hf_token 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;
 '
 

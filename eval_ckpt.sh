@@ -1,7 +1,7 @@
 #!/bin/bash
 
-MODEL_PATH="/home/LLM_Compression/logs/fine_tuning/full/Llama13b_lima/"
-SAVE_DIR="/home/LLM_Compression/logs/Llama13b_lima/"
+MODEL_PATH="/home/LLM_Compression/logs/fine_tuning/full/Llama7b_ste_lima_4bit/"
+SAVE_DIR="/home/LLM_Compression/logs/Llama7b_ste_lima_4bit/"
 TASK="paper"
 
 python eval_checkpoints.py \

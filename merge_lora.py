@@ -6,7 +6,7 @@ import numpy as np
 from copy import deepcopy
 from tqdm import tqdm
 from peft import PeftModel 
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 
@@ -33,7 +33,6 @@ if __name__ == '__main__':
         # Construct the full path of the item
         item_path = os.path.join(parent_directory, item)
          # Check if the item is a directory and matches the pattern
-        print(item_path, item)
         if os.path.isdir(item_path) and item.startswith(prefix):
             print(f"Found directory: {item}")
             # Here, you can add your code to process each "checkpoint-<number>" directory
@@ -42,10 +41,12 @@ if __name__ == '__main__':
 
 
             model = PeftModel.from_pretrained(base_model, item_path) 
-            merged_model = model.merge_and_unload()
-
+            merged_model = model.merge_and_unload() 
+            
+            tokenizer = AutoTokenizer.from_pretrained(item_path)
             result_path = f'{save_path}checkpoint-{number_part}/'
             merged_model.save_pretrained(result_path, from_pt=True)
+            tokenizer.save_pretrained(result_path)
 
             del model
             del merged_model

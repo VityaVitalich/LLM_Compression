@@ -16,28 +16,29 @@ def model_configs():
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = 'meta-llama/Llama-2-13b-hf' # "meta-llama/Llama-2-7b-hf"
+    config.model_name_or_path = '/home/cache/Llama13b_4bit_128fp' # "meta-llama/Llama-2-7b-hf"
     config.model_config_name = None
     config.tokenizer_name = None
     config.token = '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'
 
     ### SAVING DIRS ###
     config.cache_dir = '/home/cache/'
-    config.output_dir = '/home/LLM_Compression/logs/fine_tuning/full/Llama13b_lima/'
+    config.output_dir = '/home/LLM_Compression/logs/fine_tuning/lora/Llama13b_lima_4bit_lora/'
     
     ### TRAINING ###
-    config.learning_rate = 3e-5
+    config.learning_rate = 1e-4
     config.weight_decay = 1e-3
     config.seed = 57
     config.num_train_epochs = 7
-    config.per_device_train_batch_size = 2
-    config.per_device_eval_batch_size = 2
-    config.gradient_accumulation_steps = 8
+    config.max_steps = -1 # set to -1 when not used
+    config.per_device_train_batch_size = 1
+    config.per_device_eval_batch_size = 1
+    config.gradient_accumulation_steps = 16
     config.gradient_checkpointing = False
     config.report_to = 'wandb'
-    config.run_name = 'Llama13b_lima'
+    config.run_name = 'Llama13b_lima_4bit_lora'
     ### eval ###
-    config.evaluation_strategy = 'epoch'
+    config.evaluation_strategy = 'no'
     config.eval_steps = 125
     ### save ###
     config.save_strategy = 'epoch'
@@ -50,7 +51,7 @@ def model_configs():
     config.clip_softmax_gamma = -12/512
 
     ### LORA ###
-    config.use_lora = False
+    config.use_lora = True
     config.lora_rank = 64
     config.lora_alpha = 16
     config.lora_dropout = 0.1
@@ -67,12 +68,12 @@ def model_configs():
     ### STE ###
     ste = config.ste = ml_collections.ConfigDict()
     ste.enable = False
-    ste.path_to_act_scales = '/home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt'
+    ste.path_to_act_scales = '/home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-13b-hf.pt'
     ste.fp_features_num = 128
     ste.layer_bits = {'q': 4, 'k': 4, 'v': 4, 'o': 4, 'down': 4, 'gate': 4, 'up': 4}
     ste.block_size = 64
     ste.learnable_scales = True
-    ste.quik_scales_path = '/home/cache/llama7b_4bit_128fp_quant_scales/quantazed_model.pt' # either put None
+    ste.quik_scales_path = '/home/cache/Llama13b_4bit_128fp/quantazed_model.pt' # either put None
 
     ### Distillation ###
     config.distillation = False

@@ -215,9 +215,10 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                         current_w_bits = 8
 
                 if getattr(subset[name], 'quantizer', False):
-                    ste_scales = subset[name].quantizer.s.detach()
+                    ste_scales = None
+                   # ste_scales = subset[name].quantizer.s.detach()
                     # replace with regular forward to not perform quantization on forward
-                    subset[name].forward = funcType(unquantized_forward, subset[name])
+                   # subset[name].forward = funcType(unquantized_forward, subset[name])
                 else:
                     ste_scales = None
                 

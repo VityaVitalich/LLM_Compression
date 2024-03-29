@@ -17,7 +17,7 @@
 
 #SBATCH -c 8
 
-#SBATCH --gpus=5
+#SBATCH --gpus=2
 
 srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trinity/home/v.moskvoretskii/images/compression.sif bash -c '
     ls;
