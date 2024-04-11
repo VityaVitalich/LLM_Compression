@@ -352,6 +352,90 @@ class SymQuant:
 
         return q
 
+# class OBS_Estimator:
+#     def __init__(
+#         self,
+#         name,
+#         ncolumns,
+#         device
+#     ):
+#         self.name = name
+#         self.ncolumns = ncolumns
+#         self.device = device
+#         self.percdamp = .01 #.025 for max activations
+#         self.H = torch.zeros((self.ncolumns, self.ncolumns), device=self.device)
+#         self.scaler_row = torch.zeros(self.ncolumns, device=self.device)
+#         self.nsamples = 0
+#         self.quantizer = None
+
+#     def add_sym_quantizer(self, weight, bit):
+#         self.quantizer = SymQuant(out_features=self.ncolumns, bit=bit)
+#         self.quantizer.compute_alpha_scale(weight)
+
+#     def add_batch(self, inp, *args):
+#         tmp = inp.shape[0]
+#         inp = inp.reshape((-1, inp.shape[-1]))    
+#         inp = inp.t() #transpose to match computing with analytical formulas
+
+#         self.H *= self.nsamples / (self.nsamples + tmp)
+#         self.nsamples += tmp
+#         inp = np.sqrt(2 / self.nsamples) * inp.float()
+        
+#         out = inp.matmul(inp.t())
+#         self.H += out
+
+#         # inp = inp.reshape((-1, inp.shape[-1]))
+#         # inp = inp.type(torch.float32).abs()
+#         # inp_union = torch.vstack([inp, self.scaler_row])
+#         # self.scaler_row = torch.max(inp_union, dim=0)[0]
+    
+#     def invert_H(self):
+#         H = self.H.to(self.device)
+#         self.H = None
+#         dead = torch.diag(H) == 0
+#         H[dead, dead] = 1
+
+#         damp = self.percdamp * torch.mean(torch.diag(H))
+#         diag = torch.arange(self.ncolumns)
+#         H[diag, diag] += damp
+#         H = torch.linalg.cholesky(H)
+#         H = torch.cholesky_inverse(H)
+#         H = torch.linalg.cholesky(H, upper=True)
+#         Hinv = H
+
+#         return Hinv, dead
+
+#     def compute_stat(self, weight):
+#         # activation_data = self.scaler_row.reshape((1,-1))
+#         # self.H = torch.matmul(activation_data.t(), activation_data)
+
+#         Hinv, dead = self.invert_H()
+
+#         W = weight.clone()
+#         W[:, dead] = 0
+#         Losses = torch.zeros(torch.tensor(self.ncolumns))
+
+#         if W.device != self.device:
+#             W = W.to(self.device)
+#         # if torch.cuda.is_available:
+#         #     Hinv = Hinv.to('cuda')
+#         #     W = W.to('cuda')
+
+#         for i in range(0, self.ncolumns):
+#             w = W[:, i].unsqueeze(1)
+#             d = Hinv[i, i]
+            
+#             if self.quantizer is not None:
+#                 w_dq = self.quantizer.quantize(w, dequantize=True)
+#                 Loss = torch.matmul((w - w_dq).t(), (w - w_dq)) / d**2
+#             else:
+#                 Loss = torch.matmul(w.t(), w) / d**2
+            
+#             Losses[i] = Loss[0] / 2
+
+#         Losses = Losses.cpu()
+#         return Losses
+
 class OBS_Estimator:
     def __init__(
         self,
@@ -372,6 +456,7 @@ class OBS_Estimator:
         self.quantizer = SymQuant(out_features=self.ncolumns, bit=bit)
         self.quantizer.compute_alpha_scale(weight)
 
+
     def add_batch(self, inp, *args):
         tmp = inp.shape[0]
         inp = inp.reshape((-1, inp.shape[-1]))    
@@ -388,31 +473,12 @@ class OBS_Estimator:
         # inp = inp.type(torch.float32).abs()
         # inp_union = torch.vstack([inp, self.scaler_row])
         # self.scaler_row = torch.max(inp_union, dim=0)[0]
-    
-    def invert_H(self):
-        H = self.H.to(self.device)
-        self.H = None
-        dead = torch.diag(H) == 0
-        H[dead, dead] = 1
-
-        damp = self.percdamp * torch.mean(torch.diag(H))
-        diag = torch.arange(self.ncolumns)
-        H[diag, diag] += damp
-        H = torch.linalg.cholesky(H)
-        H = torch.cholesky_inverse(H)
-        H = torch.linalg.cholesky(H, upper=True)
-        Hinv = H
-
-        return Hinv, dead
 
     def compute_stat(self, weight):
         # activation_data = self.scaler_row.reshape((1,-1))
         # self.H = torch.matmul(activation_data.t(), activation_data)
 
-        Hinv, dead = self.invert_H()
-
         W = weight.clone()
-        W[:, dead] = 0
         Losses = torch.zeros(torch.tensor(self.ncolumns))
 
         if W.device != self.device:
@@ -421,17 +487,11 @@ class OBS_Estimator:
         #     Hinv = Hinv.to('cuda')
         #     W = W.to('cuda')
 
-        for i in range(0, self.ncolumns):
-            w = W[:, i].unsqueeze(1)
-            d = Hinv[i, i]
-            
-            if self.quantizer is not None:
-                w_dq = self.quantizer.quantize(w, dequantize=True)
-                Loss = torch.matmul((w - w_dq).t(), (w - w_dq)) / d**2
-            else:
-                Loss = torch.matmul(w.t(), w) / d**2
-            
-            Losses[i] = Loss[0] / 2
+        W_dq = self.quantizer.quantize(W, dequantize=True)
+        frob_norm_error = (W - W_dq).pow(2).sum(dim=0)
+
+        Losses = torch.diag(self.H)
+        Losses *= frob_norm_error
 
         Losses = Losses.cpu()
         return Losses
