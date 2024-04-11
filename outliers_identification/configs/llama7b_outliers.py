@@ -7,7 +7,7 @@ def model_configs():
     ### DATASET ###
     data = config.data = ml_collections.ConfigDict()
     data.dataset_path = "/home/LLM_compression/outliers_identification/datasets/val.jsonl.zst"
-    data.output_path = "/home/LLM_compression/outliers_identification/weight_scales/llama7b_act_scales_ptb.pt"
+    data.output_path = "/home/LLaMA/huggingface/act_scales/tulu-2-7b_activation_estimator.pt"
     data.max_seq_length = 512
     data.num_samples = 512
     data.trust_remote_code = True
@@ -15,14 +15,14 @@ def model_configs():
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
+    config.model_name_or_path = '/home/LLaMA/huggingface/tulu-2-7b'
     config.token = None
     config.use_fast_tokenizer = True
     config.trust_remote_code = True
 
-    ### OBS_estimator ###
+    ### Estimator ###
     config.estimator = {
-        'estimator':'Activation_Estimator', #'OBS_Estimator', 'Wanda_Estimator', 'Activation_Estimator'
+        'estimator':'Activation_Estimator', #'OBS_Estimator',
         'agg': 'max',
         'add_quantizer': False,
         'bit': 0
