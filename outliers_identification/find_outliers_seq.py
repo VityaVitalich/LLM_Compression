@@ -436,21 +436,90 @@ class SymQuant:
 #         Losses = Losses.cpu()
 #         return Losses
 
+
+# class OBS_Estimator:
+#     def __init__(
+#         self,
+#         name,
+#         ncolumns,
+#         device
+#     ):
+#         self.name = name
+#         self.ncolumns = ncolumns
+#         self.device = device
+#         self.percdamp = .01 #.025 for max activations
+#         self.H = torch.zeros((self.ncolumns, self.ncolumns), device=self.device)
+#         self.scaler_row = torch.zeros(self.ncolumns, device=self.device)
+#         self.nsamples = 0
+#         self.quantizer = None
+
+#     def add_sym_quantizer(self, weight, bit):
+#         self.quantizer = SymQuant(out_features=self.ncolumns, bit=bit)
+#         self.quantizer.compute_alpha_scale(weight)
+
+
+#     def add_batch(self, inp, *args):
+#         tmp = inp.shape[0]
+#         inp = inp.reshape((-1, inp.shape[-1]))    
+#         inp = inp.t() #transpose to match computing with analytical formulas
+
+#         self.H *= self.nsamples / (self.nsamples + tmp)
+#         self.nsamples += tmp
+#         inp = np.sqrt(2 / self.nsamples) * inp.float()
+        
+#         out = inp.matmul(inp.t())
+#         self.H += out
+
+#         # inp = inp.reshape((-1, inp.shape[-1]))
+#         # inp = inp.type(torch.float32).abs()
+#         # inp_union = torch.vstack([inp, self.scaler_row])
+#         # self.scaler_row = torch.max(inp_union, dim=0)[0]
+
+#     def compute_stat(self, weight):
+#         # activation_data = self.scaler_row.reshape((1,-1))
+#         # self.H = torch.matmul(activation_data.t(), activation_data)
+
+#         W = weight.clone()
+#         Losses = torch.zeros(torch.tensor(self.ncolumns))
+
+#         if W.device != self.device:
+#             W = W.to(self.device)
+#         # if torch.cuda.is_available:
+#         #     Hinv = Hinv.to('cuda')
+#         #     W = W.to('cuda')
+
+#         W_dq = self.quantizer.quantize(W, dequantize=True)
+#         frob_norm_error = (W - W_dq).pow(2).sum(dim=0)
+
+#         Losses = torch.diag(self.H)
+#         Losses *= frob_norm_error
+
+#         Losses = Losses.cpu()
+#         return Losses
+
+
 class OBS_Estimator:
     def __init__(
         self,
         name,
         ncolumns,
-        device
+        device,
+        agg
     ):
         self.name = name
         self.ncolumns = ncolumns
         self.device = device
         self.percdamp = .01 #.025 for max activations
-        self.H = torch.zeros((self.ncolumns, self.ncolumns), device=self.device)
-        self.scaler_row = torch.zeros(self.ncolumns, device=self.device)
+
         self.nsamples = 0
         self.quantizer = None
+        self.agg = agg
+
+        if self.agg == 'l2':
+            self.H = torch.zeros((self.ncolumns, self.ncolumns), device=self.device)
+        
+        elif self.agg == 'max':
+            self.scaler_row = torch.zeros(self.ncolumns, device=self.device)
 
     def add_sym_quantizer(self, weight, bit):
         self.quantizer = SymQuant(out_features=self.ncolumns, bit=bit)
@@ -458,25 +527,25 @@ class OBS_Estimator:
 
 
     def add_batch(self, inp, *args):
-        tmp = inp.shape[0]
-        inp = inp.reshape((-1, inp.shape[-1]))    
-        inp = inp.t() #transpose to match computing with analytical formulas
+        if self.agg == 'l2':
+            tmp = inp.shape[0]
+            inp = inp.reshape((-1, inp.shape[-1]))    
+            inp = inp.t() #transpose to match computing with analytical formulas
 
-        self.H *= self.nsamples / (self.nsamples + tmp)
-        self.nsamples += tmp
-        inp = np.sqrt(2 / self.nsamples) * inp.float()
+            self.H *= self.nsamples / (self.nsamples + tmp)
+            self.nsamples += tmp
+            inp = np.sqrt(2 / self.nsamples) * inp.float()
+            
+            out = inp.matmul(inp.t())
+            self.H += out
         
-        out = inp.matmul(inp.t())
-        self.H += out
-
-        # inp = inp.reshape((-1, inp.shape[-1]))
-        # inp = inp.type(torch.float32).abs()
-        # inp_union = torch.vstack([inp, self.scaler_row])
-        # self.scaler_row = torch.max(inp_union, dim=0)[0]
+        elif self.agg == 'max':
+            inp = inp.reshape((-1, inp.shape[-1]))
+            inp = inp.type(torch.float32).abs()
+            inp_union = torch.vstack([inp, self.scaler_row])
+            self.scaler_row = torch.max(inp_union, dim=0)[0]
 
     def compute_stat(self, weight):
-        # activation_data = self.scaler_row.reshape((1,-1))
-        # self.H = torch.matmul(activation_data.t(), activation_data)
 
         W = weight.clone()
         Losses = torch.zeros(torch.tensor(self.ncolumns))
@@ -488,12 +557,20 @@ class OBS_Estimator:
         #     W = W.to('cuda')
 
         W_dq = self.quantizer.quantize(W, dequantize=True)
-        frob_norm_error = (W - W_dq).pow(2).sum(dim=0)
 
-        Losses = torch.diag(self.H)
-        Losses *= frob_norm_error
+        if self.agg == 'l2':            
+            err = (W - W_dq).pow(2).sum(dim=0)
+            Losses = torch.diag(self.H)
+        
+        elif self.agg == 'max':
+            H = self.scaler_row * self.scaler_row
+            err = torch.abs(W - W_dq)
+            err = torch.max(err, dim=0)[0]
+            Losses = H
 
+        Losses *= err
         Losses = Losses.cpu()
+
         return Losses
 
 class Wanda_Estimator:
@@ -714,8 +791,9 @@ def llama_sequential(model, dataloader, data_args, estimator_args):
                 nrows = lin_layer.weight.shape[0]
                 ncolumns = lin_layer.weight.shape[1]
                 if estimator_args['estimator'] == 'OBS_Estimator':
+                    agg = estimator_args['agg']
                     estimator = OBS_Estimator(
-                        name=name, ncolumns=ncolumns, device=device
+                        name=name, ncolumns=ncolumns, device=device, agg=agg
                     )
                 elif estimator_args['estimator'] == 'Wanda_Estimator':
                     agg = estimator_args['agg']
