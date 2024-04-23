@@ -432,7 +432,7 @@ def run_train(
     #     model.enable_ste(outlier_ids=outlier_ids, layer_bit=layer_bit, block_size=config.ste.block_size)
 
     if config['QuantizedLinear']['replace']:
-        outliers_config= config['outliers']
+        outliers_config = config['outliers']
         outlier_ids = get_fp_llama(
             outliers_config['path_to_act_scales'], 
             outliers_config['fp_features_num']
