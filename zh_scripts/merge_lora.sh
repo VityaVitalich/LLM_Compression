@@ -19,7 +19,7 @@
 
 #SBATCH --gpus=1
 
-srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trinity/home/v.moskvoretskii/images/new_clipped_sm.sif bash -c '
+srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trinity/home/v.moskvoretskii/images/new_clipped_sm_fixed_peft.sif bash -c '
     cd /home;
     export HF_TOKEN=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;
     export SAVING_DIR=/home/cache/;
