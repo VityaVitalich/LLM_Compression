@@ -498,7 +498,7 @@ class SymQuant:
 #         return Losses
 
 
-class OBS_Estimator:
+class OBD_Estimator:
     def __init__(
         self,
         name,
@@ -573,6 +573,83 @@ class OBS_Estimator:
 
         return Losses
 
+class OBDx2_Estimator:
+    def __init__(
+        self,
+        name,
+        ncolumns,
+        device,
+        agg
+    ):
+        self.name = name
+        self.ncolumns = ncolumns
+        self.device = device
+        self.percdamp = .01 #.025 for max activations
+
+        self.nsamples = 0
+        self.quantizer = None
+        self.agg = agg
+
+        if self.agg == 'l2':
+            self.H = torch.zeros((self.ncolumns, self.ncolumns), device=self.device)
+        
+        elif self.agg == 'max':
+            self.scaler_row = torch.zeros(self.ncolumns, device=self.device)
+
+    def add_sym_quantizer(self, weight, bit):
+        self.quantizer = SymQuant(out_features=self.ncolumns, bit=bit)
+        self.quantizer.compute_alpha_scale(weight)
+
+
+    def add_batch(self, inp, *args):
+        if self.agg == 'l2':
+            tmp = inp.shape[0]
+            inp = inp.reshape((-1, inp.shape[-1]))    
+            inp = inp.t() #transpose to match computing with analytical formulas
+
+            self.H *= self.nsamples / (self.nsamples + tmp)
+            self.nsamples += tmp
+            inp = np.sqrt(2 / self.nsamples) * inp.float()
+            
+            out = inp.matmul(inp.t())
+            self.H += out
+        
+        elif self.agg == 'max':
+            inp = inp.reshape((-1, inp.shape[-1]))
+            inp = inp.type(torch.float32).abs()
+            inp_union = torch.vstack([inp, self.scaler_row])
+            self.scaler_row = torch.max(inp_union, dim=0)[0]
+
+    def compute_stat(self, weight):
+
+        W = weight.clone()
+        Losses = torch.zeros(torch.tensor(self.ncolumns))
+
+        if W.device != self.device:
+            W = W.to(self.device)
+        # if torch.cuda.is_available:
+        #     Hinv = Hinv.to('cuda')
+        #     W = W.to('cuda')
+
+        W_dq = self.quantizer.quantize(W, dequantize=True)
+
+        if self.agg == 'l2':            
+            err = (W - W_dq).pow(2).sum(dim=0)
+            Losses = torch.diag(self.H)
+        
+        elif self.agg == 'max':
+            H = self.scaler_row * self.scaler_row
+            err = torch.abs(W - W_dq)
+            err = torch.max(err, dim=0)[0]
+            err = err ** 2
+            Losses = H
+
+        Losses *= err
+        Losses = Losses.cpu()
+
+        return Losses
+
+
 class Wanda_Estimator:
     def __init__(
         self,
@@ -611,22 +688,42 @@ class Wanda_Estimator:
         self.scaler_row = torch.max(inp_union, dim=0)[0]
              
     def compute_stat(self, w):
-        activation_data = torch.sqrt(self.scaler_row.reshape((1,-1)))
-
+        
         if self.quantizer is not None:
             w_dq = self.quantizer.quantize(w, dequantize=True)
-            Loss = torch.abs(w - w_dq) * activation_data
+            Loss = torch.abs(w - w_dq)
         else:
-            Loss = torch.abs(w) * activation_data
+            Loss = torch.abs(w)
 
-        if self.agg == 'l2':
-            Loss = torch.norm(Loss, p=2, dim=0)
-        elif self.agg == 'max':
-            Loss = torch.max(Loss, dim=0)[0]
+        if self.agg == 'max':
+            activation_data = self.scaler_row.reshape((1,-1))
+        elif self.agg == 'max_sqrt':
+            activation_data = torch.sqrt(self.scaler_row.reshape((1,-1)))
+        
+        Loss *= activation_data
+        Loss = torch.max(Loss, dim=0)[0]        
 
         Loss = Loss.cpu()
-        
         return Loss
+
+
+        # activation_data = torch.sqrt(self.scaler_row.reshape((1,-1)))
+        # activation_data = self.scaler_row.reshape((1,-1))
+
+        # if self.quantizer is not None:
+        #     w_dq = self.quantizer.quantize(w, dequantize=True)
+        #     Loss = torch.abs(w - w_dq) * activation_data
+        # else:
+        #     Loss = torch.abs(w) * activation_data
+
+        # if self.agg == 'l2':
+        #     Loss = torch.norm(Loss, p=2, dim=0)
+        # elif self.agg == 'max':
+        #     Loss = torch.max(Loss, dim=0)[0]
+
+        # Loss = Loss.cpu()
+        
+        # return Loss
         
 class Activation_Estimator:
     def __init__(
@@ -790,7 +887,12 @@ def llama_sequential(model, dataloader, data_args, estimator_args):
                 lin_layer = subset[name]
                 nrows = lin_layer.weight.shape[0]
                 ncolumns = lin_layer.weight.shape[1]
-                if estimator_args['estimator'] == 'OBS_Estimator':
+                if estimator_args['estimator'] == 'OBD_Estimator':
+                    agg = estimator_args['agg']
+                    estimator = OBD_Estimator(
+                        name=name, ncolumns=ncolumns, device=device, agg=agg
+                    )
+                elif estimator_args['estimator'] == 'OBDx2_Estimator':
                     agg = estimator_args['agg']
                     estimator = OBS_Estimator(
                         name=name, ncolumns=ncolumns, device=device, agg=agg
