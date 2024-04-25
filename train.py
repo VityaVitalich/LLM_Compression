@@ -260,6 +260,7 @@ def run_train(
             lora_dropout=config.lora_dropout,
             target_modules=config.lora_target_modules,
             init_lora_weights=True,
+            use_dora=config.dora
         )
         model = get_peft_model(model, lora_config)
 

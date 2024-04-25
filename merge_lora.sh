@@ -1,8 +1,8 @@
 #!/bin/bash
 
 BASE_MODEL="meta-llama/Llama-2-13b-hf"
-ADAPTERS_PATH="/home/LLM_Compression/logs/fine_tuning/lora/Llama13b_lima_4bit_lora/"
-SAVE_DIR="/home/LLM_Compression/logs/fine_tuning/full/Llama13b_lima_4bit_lora/"
+ADAPTERS_PATH="/home/LLM_Compression/ckpts/lora/Llama13b_tulu_dora_lowlr/"
+SAVE_DIR="/home/LLM_Compression/ckpts/full/Llama13b_tulu_dora_lowlr/"
 TOKEN=$HF_TOKEN
 
 python merge_lora.py \

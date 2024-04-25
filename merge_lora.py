@@ -26,7 +26,8 @@ if __name__ == '__main__':
     base_model = AutoModelForCausalLM.from_pretrained(
             args.base_model,
             device_map='auto',
-            use_auth_token=args.token)
+            use_auth_token=args.token,
+            torch_dtype=torch.bfloat16)
 
     # Iterate over all items in the parent directory
     for item in os.listdir(parent_directory):
