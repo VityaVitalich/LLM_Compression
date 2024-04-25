@@ -1,0 +1,176 @@
+{
+  "results": {
+    "ai2_arc": {
+      "acc,none": 0.6902480270574972,
+      "acc_stderr,none": 0.051227361812135164,
+      "acc_norm,none": 0.6947576099210823,
+      "acc_norm_stderr,none": 0.045892407850688086,
+      "alias": "ai2_arc"
+    },
+    "arc_challenge": {
+      "acc,none": 0.47440273037542663,
+      "acc_stderr,none": 0.01459223088529896,
+      "acc_norm,none": 0.5025597269624573,
+      "acc_norm_stderr,none": 0.014611199329843793,
+      "alias": " - arc_challenge"
+    },
+    "arc_easy": {
+      "acc,none": 0.7967171717171717,
+      "acc_stderr,none": 0.008257919197783401,
+      "acc_norm,none": 0.7895622895622896,
+      "acc_norm_stderr,none": 0.008364176253861638,
+      "alias": " - arc_easy"
+    },
+    "piqa": {
+      "acc,none": 0.780739934711643,
+      "acc_stderr,none": 0.009653357463605338,
+      "acc_norm,none": 0.7916213275299239,
+      "acc_norm_stderr,none": 0.009476125383049452,
+      "alias": "piqa"
+    }
+  },
+  "groups": {
+    "ai2_arc": {
+      "acc,none": 0.6902480270574972,
+      "acc_stderr,none": 0.051227361812135164,
+      "acc_norm,none": 0.6947576099210823,
+      "acc_norm_stderr,none": 0.045892407850688086,
+      "alias": "ai2_arc"
+    }
+  },
+  "configs": {
+    "arc_challenge": {
+      "task": "arc_challenge",
+      "group": [
+        "ai2_arc"
+      ],
+      "dataset_path": "ai2_arc",
+      "dataset_name": "ARC-Challenge",
+      "training_split": "train",
+      "validation_split": "validation",
+      "test_split": "test",
+      "doc_to_text": "Question: {{question}}\nAnswer:",
+      "doc_to_target": "{{choices.label.index(answerKey)}}",
+      "doc_to_choice": "{{choices.text}}",
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "metric_list": [
+        {
+          "metric": "acc",
+          "aggregation": "mean",
+          "higher_is_better": true
+        },
+        {
+          "metric": "acc_norm",
+          "aggregation": "mean",
+          "higher_is_better": true
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": true,
+      "doc_to_decontamination_query": "Question: {{question}}\nAnswer:",
+      "metadata": [
+        {
+          "version": 1.0
+        }
+      ]
+    },
+    "arc_easy": {
+      "task": "arc_easy",
+      "group": [
+        "ai2_arc"
+      ],
+      "dataset_path": "ai2_arc",
+      "dataset_name": "ARC-Easy",
+      "training_split": "train",
+      "validation_split": "validation",
+      "test_split": "test",
+      "doc_to_text": "Question: {{question}}\nAnswer:",
+      "doc_to_target": "{{choices.label.index(answerKey)}}",
+      "doc_to_choice": "{{choices.text}}",
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "metric_list": [
+        {
+          "metric": "acc",
+          "aggregation": "mean",
+          "higher_is_better": true
+        },
+        {
+          "metric": "acc_norm",
+          "aggregation": "mean",
+          "higher_is_better": true
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": true,
+      "doc_to_decontamination_query": "Question: {{question}}\nAnswer:",
+      "metadata": [
+        {
+          "version": 1.0
+        }
+      ]
+    },
+    "piqa": {
+      "task": "piqa",
+      "dataset_path": "piqa",
+      "training_split": "train",
+      "validation_split": "validation",
+      "doc_to_text": "Question: {{goal}}\nAnswer:",
+      "doc_to_target": "label",
+      "doc_to_choice": "{{[sol1, sol2]}}",
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "metric_list": [
+        {
+          "metric": "acc",
+          "aggregation": "mean",
+          "higher_is_better": true
+        },
+        {
+          "metric": "acc_norm",
+          "aggregation": "mean",
+          "higher_is_better": true
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": true,
+      "doc_to_decontamination_query": "goal",
+      "metadata": [
+        {
+          "version": 1.0
+        }
+      ]
+    }
+  },
+  "versions": {
+    "ai2_arc": "N/A",
+    "arc_challenge": "Yaml",
+    "arc_easy": "Yaml",
+    "piqa": "Yaml"
+  },
+  "n-shot": {
+    "ai2_arc": 0,
+    "arc_challenge": 0,
+    "arc_easy": 0,
+    "piqa": 0
+  },
+  "config": {
+    "model": "hf",
+    "model_args": "pretrained=/home/cache/tulu7b_4bit_128fp",
+    "batch_size": "16",
+    "batch_sizes": [],
+    "device": "cuda:0",
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": {}
+  },
+  "git_hash": "b6e1e1c"
+}

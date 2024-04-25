@@ -1,0 +1,1176 @@
+INFO:    User not listed in /etc/subuid, trying root-mapped namespace
+INFO:    Using fakeroot command combined with root-mapped namespace
+INFO:    underlay of /etc/localtime required more than 50 (89) bind mounts
+AQLM
+LICENSE
+QUIK
+README.md
+__pycache__
+ckpt_vis.ipynb
+ckpts
+clip_eval.py
+clip_test.ipynb
+collators.py
+collect_logits.py
+configs
+data_utils.py
+distill_test.ipynb
+distill_trainer.py
+eval_checkpoints.py
+eval_ckpt.sh
+evaluate.sh
+fine_tune.sh
+get_LIMA.ipynb
+gptvq
+llm-awq
+llm-tune
+llm-tune-accelerate
+lm-evaluation-harness
+logs
+merge_lora.py
+merge_lora.sh
+old_logs
+peft
+peft-rosa
+quantize_checkpoints.py
+requirements.txt
+rpca.py
+run_collect_logits.sh
+run_rpca.py
+run_rpca.sh
+sensitivity
+ste_utils.py
+test_rpca.ipynb
+train.py
+transformers_modified
+wandb
+zh_logs
+zh_scripts
+LLM_Compression
+LLM_Taxonomy
+MultiModalCoreset
+ablate.txt
+cache
+data
+food.txt
+images
+output.txt
+outputs
+psy.txt
+tax.txt
+~
+AQLM
+LICENSE
+QUIK
+README.md
+__pycache__
+ckpt_vis.ipynb
+ckpts
+clip_eval.py
+clip_test.ipynb
+collators.py
+collect_logits.py
+configs
+data_utils.py
+distill_test.ipynb
+distill_trainer.py
+eval_checkpoints.py
+eval_ckpt.sh
+evaluate.sh
+fine_tune.sh
+get_LIMA.ipynb
+gptvq
+llm-awq
+llm-tune
+llm-tune-accelerate
+lm-evaluation-harness
+logs
+merge_lora.py
+merge_lora.sh
+old_logs
+peft
+peft-rosa
+quantize_checkpoints.py
+requirements.txt
+rpca.py
+run_collect_logits.sh
+run_rpca.py
+run_rpca.sh
+sensitivity
+ste_utils.py
+test_rpca.ipynb
+train.py
+transformers_modified
+wandb
+zh_logs
+zh_scripts
+Wed Apr 24 14:14:34 2024       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.54.14              Driver Version: 550.54.14      CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-SXM4-80GB          Off |   00000000:51:00.0 Off |                    0 |
+| N/A   30C    P0             60W /  400W |       0MiB /  81920MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Package                   Version         Editable project location
+------------------------- --------------- -------------------------------------------
+absl-py                   2.1.0
+accelerate                0.26.1
+aiohttp                   3.9.1
+aiosignal                 1.3.1
+anyio                     4.2.0
+appdirs                   1.4.4
+argon2-cffi               23.1.0
+argon2-cffi-bindings      21.2.0
+arrow                     1.3.0
+asttokens                 2.0.5
+astunparse                1.6.3
+async-lru                 2.0.4
+async-timeout             4.0.3
+attrs                     23.1.0
+Babel                     2.14.0
+backcall                  0.2.0
+beautifulsoup4            4.12.2
+bleach                    6.1.0
+boltons                   23.0.0
+brotlipy                  0.7.0
+cachetools                5.3.2
+certifi                   2023.7.22
+cffi                      1.15.1
+chardet                   4.0.0
+charset-normalizer        2.0.4
+click                     8.0.4
+colorama                  0.4.6
+comm                      0.2.1
+conda                     23.9.0
+conda-build               3.27.0
+conda-content-trust       0.2.0
+conda_index               0.3.0
+conda-libmamba-solver     23.7.0
+conda-package-handling    2.2.0
+conda_package_streaming   0.9.0
+contextlib2               21.6.0
+cryptography              41.0.3
+DataProperty              1.0.1
+datasets                  2.16.1
+debugpy                   1.8.0
+decorator                 5.1.1
+defusedxml                0.7.1
+dill                      0.3.7
+dnspython                 2.4.2
+docker-pycreds            0.4.0
+evaluate                  0.4.1
+exceptiongroup            1.0.4
+executing                 0.8.3
+expecttest                0.1.6
+fastjsonschema            2.19.1
+filelock                  3.9.0
+fqdn                      1.5.1
+frozenlist                1.4.1
+fsspec                    2023.9.2
+gitdb                     4.0.11
+GitPython                 3.1.41
+gmpy2                     2.1.2
+huggingface-hub           0.20.3
+hypothesis                6.87.2
+idna                      3.4
+ipykernel                 6.29.0
+ipython                   8.15.0
+ipywidgets                8.1.1
+isoduration               20.11.0
+jedi                      0.18.1
+Jinja2                    3.1.2
+joblib                    1.3.2
+json5                     0.9.14
+jsonlines                 4.0.0
+jsonpatch                 1.32
+jsonpointer               2.1
+jsonschema                4.21.1
+jsonschema-specifications 2023.12.1
+jupyter                   1.0.0
+jupyter_client            8.6.0
+jupyter-console           6.6.3
+jupyter_core              5.7.1
+jupyter-events            0.9.0
+jupyter-lsp               2.2.2
+jupyter_server            2.12.5
+jupyter_server_terminals  0.5.2
+jupyterlab                4.0.11
+jupyterlab_pygments       0.3.0
+jupyterlab_server         2.25.2
+jupyterlab-widgets        3.0.9
+libarchive-c              2.9
+libmambapy                1.4.1
+lm_eval                   0.4.0           /home/LLM_Compression/lm-evaluation-harness
+lxml                      5.1.0
+MarkupSafe                2.1.1
+matplotlib-inline         0.1.6
+mbstrdecoder              1.1.3
+mistune                   3.0.2
+mkl-fft                   1.3.8
+mkl-random                1.2.4
+mkl-service               2.4.0
+ml-collections            0.1.1
+more-itertools            8.12.0
+mpmath                    1.3.0
+multidict                 6.0.4
+multiprocess              0.70.15
+nbclient                  0.9.0
+nbconvert                 7.14.2
+nbformat                  5.9.2
+nest-asyncio              1.6.0
+networkx                  3.1
+nltk                      3.8.1
+notebook                  7.0.7
+notebook_shim             0.2.3
+numexpr                   2.8.8
+numpy                     1.26.0
+nvidia-ml-py              12.535.133
+nvitop                    1.3.2
+overrides                 7.6.0
+packaging                 23.1
+pandas                    2.2.0
+pandocfilters             1.5.1
+parso                     0.8.3
+pathvalidate              3.2.0
+peft                      0.7.1
+pexpect                   4.8.0
+pickleshare               0.7.5
+Pillow                    10.0.1
+pip                       23.2.1
+pkginfo                   1.9.6
+platformdirs              4.1.0
+pluggy                    1.0.0
+portalocker               2.8.2
+prometheus-client         0.19.0
+prompt-toolkit            3.0.36
+protobuf                  4.25.2
+psutil                    5.9.0
+ptyprocess                0.7.0
+pure-eval                 0.2.2
+pyarrow                   15.0.0
+pyarrow-hotfix            0.6
+pybind11                  2.11.1
+pycosat                   0.6.6
+pycparser                 2.21
+Pygments                  2.15.1
+pyOpenSSL                 23.2.0
+PySocks                   1.7.1
+pytablewriter             1.2.0
+python-dateutil           2.8.2
+python-etcd               0.4.5
+python-json-logger        2.0.7
+pytz                      2023.3.post1
+PyYAML                    6.0
+pyzmq                     25.1.2
+qtconsole                 5.5.1
+QtPy                      2.4.1
+referencing               0.32.1
+regex                     2023.12.25
+requests                  2.31.0
+responses                 0.18.0
+rfc3339-validator         0.1.4
+rfc3986-validator         0.1.1
+rouge-score               0.1.2
+rpds-py                   0.17.1
+ruamel.yaml               0.17.21
+ruamel.yaml.clib          0.2.6
+sacrebleu                 2.4.0
+safetensors               0.4.2
+scikit-learn              1.4.0
+scipy                     1.12.0
+Send2Trash                1.8.2
+sentry-sdk                1.39.2
+setproctitle              1.3.3
+setuptools                68.0.0
+six                       1.16.0
+smmap                     5.0.1
+sniffio                   1.3.0
+sortedcontainers          2.4.0
+soupsieve                 2.5
+sqlitedict                2.1.0
+stack-data                0.2.0
+sympy                     1.11.1
+tabledata                 1.3.3
+tabulate                  0.9.0
+tcolorpy                  0.1.4
+termcolor                 2.4.0
+terminado                 0.18.0
+threadpoolctl             3.2.0
+tinycss2                  1.2.1
+tokenizers                0.15.1
+tomli                     2.0.1
+toolz                     0.12.0
+torch                     2.1.0
+torchaudio                2.1.0
+torchelastic              0.2.2
+torchvision               0.16.0
+tornado                   6.4
+tqdm                      4.65.0
+tqdm-multiprocess         0.0.11
+traitlets                 5.7.1
+transformers              4.38.0.dev0     /home/LLM_Compression/transformers_modified
+triton                    2.1.0
+truststore                0.8.0
+typepy                    1.3.2
+types-dataclasses         0.6.6
+types-python-dateutil     2.8.19.20240106
+typing_extensions         4.7.1
+tzdata                    2023.4
+uri-template              1.3.0
+urllib3                   1.26.16
+wandb                     0.16.2
+wcwidth                   0.2.5
+webcolors                 1.13
+webencodings              0.5.1
+websocket-client          1.7.0
+wheel                     0.41.2
+widgetsnbextension        4.0.9
+xxhash                    3.4.1
+yarl                      1.9.4
+zstandard                 0.19.0
+/home/LLM_Compression/transformers_modified/src/transformers/models/auto/auto_factory.py:472: FutureWarning: The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.
+  warnings.warn(
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards:  50%|█████     | 1/2 [00:14<00:14, 14.81s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:19<00:00,  9.10s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:19<00:00,  9.96s/it]
+model.layers.0.self_attn.q_proj.weight
+iteration: 1, error: 0.0005999128635413387
+iteration: 2, error: 2.794743257021798e-06
+iteration: 3, error: 1.889038971530465e-06
+iteration: 4, error: 4.319004369657994e-06
+iteration: 5, error: 5.806822108046279e-06
+iteration: 6, error: 5.698420559655061e-06
+iteration: 7, error: 5.489263707549819e-06
+iteration: 8, error: 5.930387453998647e-06
+iteration: 9, error: 5.643469541611756e-06
+iteration: 10, error: 4.2349929558536975e-06
+model.layers.0.self_attn.k_proj.weight
+iteration: 1, error: 0.0006720622361709555
+iteration: 2, error: 2.9203605452419253e-06
+iteration: 3, error: 1.8211658936881224e-06
+iteration: 4, error: 5.7105514272013915e-06
+iteration: 5, error: 7.468100034488913e-06
+iteration: 6, error: 7.798327100339997e-06
+iteration: 7, error: 7.360662339724346e-06
+iteration: 8, error: 8.480834079779312e-06
+iteration: 9, error: 8.976228962515829e-06
+iteration: 10, error: 8.243806081570493e-06
+model.layers.0.self_attn.v_proj.weight
+iteration: 1, error: 0.000495553902043338
+iteration: 2, error: 2.337742014880106e-08
+model.layers.0.self_attn.o_proj.weight
+iteration: 1, error: 0.0003220096777283185
+iteration: 2, error: 1.5198845387864267e-08
+model.layers.0.mlp.gate_proj.weight
+iteration: 1, error: 0.00044820796541296176
+iteration: 2, error: 1.8101879445739945e-09
+model.layers.0.mlp.up_proj.weight
+iteration: 1, error: 0.0004407078076483178
+iteration: 2, error: 1.7416798523655023e-09
+model.layers.0.mlp.down_proj.weight
+iteration: 1, error: 0.00045941151721833756
+iteration: 2, error: 1.5200846180482832e-09
+model.layers.1.self_attn.q_proj.weight
+iteration: 1, error: 0.0011841782428371967
+iteration: 2, error: 4.384815685823035e-06
+iteration: 3, error: 2.3347673591983865e-06
+iteration: 4, error: 6.031526924611535e-06
+iteration: 5, error: 8.095813110417535e-06
+iteration: 6, error: 9.505686110781101e-06
+iteration: 7, error: 8.102335998707952e-06
+iteration: 8, error: 5.267903072415191e-06
+iteration: 9, error: 7.453344130784231e-06
+iteration: 10, error: 9.034498553201005e-06
+model.layers.1.self_attn.k_proj.weight
+iteration: 1, error: 0.00117873635192282
+iteration: 2, error: 2.0185139122773803e-06
+iteration: 3, error: 1.0268492012399368e-06
+iteration: 4, error: 2.6471745507521014e-06
+iteration: 5, error: 7.1953992044980145e-06
+iteration: 6, error: 9.142355299344592e-06
+iteration: 7, error: 8.275879803426347e-06
+iteration: 8, error: 8.85166317763665e-06
+iteration: 9, error: 1.0603404482958346e-05
+iteration: 10, error: 1.0345340650282949e-05
+model.layers.1.self_attn.v_proj.weight
+iteration: 1, error: 0.00045028845640585167
+iteration: 2, error: 1.49510222511042e-08
+model.layers.1.self_attn.o_proj.weight
+iteration: 1, error: 0.0003699003668659703
+iteration: 2, error: 1.0593645939181216e-06
+iteration: 3, error: 6.234426436738897e-07
+iteration: 4, error: 1.5727579574315462e-06
+iteration: 5, error: 1.7199442531634182e-06
+iteration: 6, error: 1.2726040278292304e-06
+iteration: 7, error: 5.686143762856114e-07
+iteration: 8, error: 1.3320780585703306e-07
+iteration: 9, error: 5.1530029010385e-07
+iteration: 10, error: 6.280152599415354e-07
+model.layers.1.mlp.gate_proj.weight
+iteration: 1, error: 0.0004981003470829098
+iteration: 2, error: 2.1621439630471655e-09
+model.layers.1.mlp.up_proj.weight
+iteration: 1, error: 0.00046920844210941314
+iteration: 2, error: 1.8074464041967419e-09
+model.layers.1.mlp.down_proj.weight
+iteration: 1, error: 0.000476032913794028
+iteration: 2, error: 1.3928096291651453e-09
+model.layers.2.self_attn.q_proj.weight
+iteration: 1, error: 0.0011939447282150186
+iteration: 2, error: 2.204640429046356e-06
+iteration: 3, error: 1.2600689034284608e-06
+iteration: 4, error: 3.193559773854668e-06
+iteration: 5, error: 4.5776282531096195e-06
+iteration: 6, error: 7.926844958704238e-06
+iteration: 7, error: 7.840943839283054e-06
+iteration: 8, error: 5.462740614412599e-06
+iteration: 9, error: 2.834882134966447e-06
+iteration: 10, error: 2.074766651730124e-06
+model.layers.2.self_attn.k_proj.weight
+iteration: 1, error: 0.0012556174868927547
+iteration: 2, error: 4.998718480999705e-06
+iteration: 3, error: 2.353525185077149e-06
+iteration: 4, error: 6.5105100297961555e-06
+iteration: 5, error: 7.233850257727312e-06
+iteration: 6, error: 8.006181468905994e-06
+iteration: 7, error: 1.1752881133678696e-05
+iteration: 8, error: 1.142215704969177e-05
+iteration: 9, error: 8.105724622359957e-06
+iteration: 10, error: 4.501614745443591e-06
+model.layers.2.self_attn.v_proj.weight
+iteration: 1, error: 0.0006435234233397735
+iteration: 2, error: 1.6268808107306584e-08
+model.layers.2.self_attn.o_proj.weight
+iteration: 1, error: 0.0006239483932216065
+iteration: 2, error: 4.8776911751924854e-08
+model.layers.2.mlp.gate_proj.weight
+iteration: 1, error: 0.0005125446649920478
+iteration: 2, error: 1.8213688048495315e-09
+model.layers.2.mlp.up_proj.weight
+iteration: 1, error: 0.00047794563163692
+iteration: 2, error: 1.5900912431070606e-09
+model.layers.2.mlp.down_proj.weight
+iteration: 1, error: 0.00048095323800092306
+iteration: 2, error: 1.3952783239098281e-09
+model.layers.3.self_attn.q_proj.weight
+iteration: 1, error: 0.0011301444246252237
+iteration: 2, error: 7.716653285005998e-08
+model.layers.3.self_attn.k_proj.weight
+iteration: 1, error: 0.0011755211974122807
+iteration: 2, error: 2.3475590646009812e-06
+iteration: 3, error: 1.3266834383008725e-06
+iteration: 4, error: 3.343183596426317e-06
+iteration: 5, error: 3.5890179870301713e-06
+iteration: 6, error: 2.5591343385815517e-06
+iteration: 7, error: 1.0991935569387415e-06
+iteration: 8, error: 4.560397455463579e-07
+iteration: 9, error: 1.0914335438656747e-06
+iteration: 10, error: 1.2208556089806612e-06
+model.layers.3.self_attn.v_proj.weight
+iteration: 1, error: 0.0006105523720468951
+iteration: 2, error: 1.523190429564998e-08
+model.layers.3.self_attn.o_proj.weight
+iteration: 1, error: 0.0005973462156208912
+iteration: 2, error: 1.4297639681563434e-06
+iteration: 3, error: 4.616892454852748e-07
+iteration: 4, error: 3.571702516059574e-06
+iteration: 5, error: 4.551334400180306e-06
+iteration: 6, error: 3.7638994772853554e-06
+iteration: 7, error: 2.0398648124113908e-06
+iteration: 8, error: 3.594023628002504e-07
+iteration: 9, error: 1.1085694935927397e-06
+iteration: 10, error: 1.6037246756425584e-06
+model.layers.3.mlp.gate_proj.weight
+iteration: 1, error: 0.0005199222503739048
+iteration: 2, error: 1.6329041793974575e-09
+model.layers.3.mlp.up_proj.weight
+iteration: 1, error: 0.0004813493347377786
+iteration: 2, error: 1.4584788466760044e-09
+model.layers.3.mlp.down_proj.weight
+iteration: 1, error: 0.00048234498677471283
+iteration: 2, error: 1.4887325344597041e-09
+model.layers.4.self_attn.q_proj.weight
+iteration: 1, error: 0.0011788283268392703
+iteration: 2, error: 7.757521107224401e-08
+model.layers.4.self_attn.k_proj.weight
+iteration: 1, error: 0.0012036969017524732
+iteration: 2, error: 1.415498311246727e-07
+iteration: 3, error: 9.161321984591463e-08
+model.layers.4.self_attn.v_proj.weight
+iteration: 1, error: 0.000644406982694858
+iteration: 2, error: 1.4882031156824402e-08
+model.layers.4.self_attn.o_proj.weight
+iteration: 1, error: 0.000630376099234849
+iteration: 2, error: 1.588089672758107e-08
+model.layers.4.mlp.gate_proj.weight
+iteration: 1, error: 0.0005303799377462545
+iteration: 2, error: 1.6590202215018226e-09
+model.layers.4.mlp.up_proj.weight
+iteration: 1, error: 0.00047778781242204655
+iteration: 2, error: 1.4281462536527637e-09
+model.layers.4.mlp.down_proj.weight
+iteration: 1, error: 0.00047653593680188806
+iteration: 2, error: 1.4627748280066969e-09
+model.layers.5.self_attn.q_proj.weight
+iteration: 1, error: 0.0011849886089218364
+iteration: 2, error: 9.737383839039488e-08
+model.layers.5.self_attn.k_proj.weight
+iteration: 1, error: 0.001233382492985288
+iteration: 2, error: 1.0227717522782101e-07
+iteration: 3, error: 6.215833547743709e-08
+model.layers.5.self_attn.v_proj.weight
+iteration: 1, error: 0.0006610951105506336
+iteration: 2, error: 1.9057132704030713e-08
+model.layers.5.self_attn.o_proj.weight
+iteration: 1, error: 0.0006467158725812454
+iteration: 2, error: 1.8463760854903086e-08
+model.layers.5.mlp.gate_proj.weight
+iteration: 1, error: 0.000532995726420883
+iteration: 2, error: 1.6875677341032299e-09
+model.layers.5.mlp.up_proj.weight
+iteration: 1, error: 0.00047770455666279053
+iteration: 2, error: 1.4199825078218644e-09
+model.layers.5.mlp.down_proj.weight
+iteration: 1, error: 0.0004769392387069742
+iteration: 2, error: 1.5015911269928865e-09
+model.layers.6.self_attn.q_proj.weight
+iteration: 1, error: 0.0011183999575130642
+iteration: 2, error: 5.6198135087554075e-08
+model.layers.6.self_attn.k_proj.weight
+iteration: 1, error: 0.0011405714917760898
+iteration: 2, error: 2.013126324055158e-07
+iteration: 3, error: 1.814653087074846e-07
+iteration: 4, error: 3.827953155470711e-07
+iteration: 5, error: 4.1399969749977796e-07
+iteration: 6, error: 3.145563590405123e-07
+iteration: 7, error: 1.5584412849105172e-07
+iteration: 8, error: 5.7043944609599276e-08
+model.layers.6.self_attn.v_proj.weight
+iteration: 1, error: 0.000613284219658272
+iteration: 2, error: 1.7541696121425212e-08
+model.layers.6.self_attn.o_proj.weight
+iteration: 1, error: 0.0006046947318307943
+iteration: 2, error: 1.723380739213163e-08
+model.layers.6.mlp.gate_proj.weight
+iteration: 1, error: 0.0005417062749677579
+iteration: 2, error: 1.7423300718289718e-09
+model.layers.6.mlp.up_proj.weight
+iteration: 1, error: 0.0004759494420457139
+iteration: 2, error: 1.4216067434361097e-09
+model.layers.6.mlp.down_proj.weight
+iteration: 1, error: 0.00047410646187053034
+iteration: 2, error: 1.5085412762653872e-09
+model.layers.7.self_attn.q_proj.weight
+iteration: 1, error: 0.0011162769862010005
+iteration: 2, error: 5.247711630912868e-08
+model.layers.7.self_attn.k_proj.weight
+iteration: 1, error: 0.0011216460825752294
+iteration: 2, error: 4.916173486156878e-08
+model.layers.7.self_attn.v_proj.weight
+iteration: 1, error: 0.0006210383614915661
+iteration: 2, error: 1.7470968926444865e-08
+model.layers.7.self_attn.o_proj.weight
+iteration: 1, error: 0.00060941244280471
+iteration: 2, error: 1.6275511104337154e-08
+model.layers.7.mlp.gate_proj.weight
+iteration: 1, error: 0.0005411540134147878
+iteration: 2, error: 1.7572681219156398e-09
+model.layers.7.mlp.up_proj.weight
+iteration: 1, error: 0.0004775041110493101
+iteration: 2, error: 1.4310845224847714e-09
+model.layers.7.mlp.down_proj.weight
+iteration: 1, error: 0.0004748012947929864
+iteration: 2, error: 1.5293286952256505e-09
+model.layers.8.self_attn.q_proj.weight
+iteration: 1, error: 0.001127387958966665
+iteration: 2, error: 4.2794228412523534e-08
+model.layers.8.self_attn.k_proj.weight
+iteration: 1, error: 0.0011337552973212167
+iteration: 2, error: 5.160195545180615e-08
+model.layers.8.self_attn.v_proj.weight
+iteration: 1, error: 0.0006380792050136205
+iteration: 2, error: 1.7412330669319737e-08
+model.layers.8.self_attn.o_proj.weight
+iteration: 1, error: 0.0006279377342815199
+iteration: 2, error: 1.6092000082652958e-08
+model.layers.8.mlp.gate_proj.weight
+iteration: 1, error: 0.0005322382250701684
+iteration: 2, error: 1.7445614226342004e-09
+model.layers.8.mlp.up_proj.weight
+iteration: 1, error: 0.00048319413068230167
+iteration: 2, error: 1.459046063333517e-09
+model.layers.8.mlp.down_proj.weight
+iteration: 1, error: 0.0004795668925091372
+iteration: 2, error: 1.5458475646849232e-09
+model.layers.9.self_attn.q_proj.weight
+iteration: 1, error: 0.0011289173713308065
+iteration: 2, error: 4.976883848677647e-08
+model.layers.9.self_attn.k_proj.weight
+iteration: 1, error: 0.0011569988213400312
+iteration: 2, error: 4.353758849117309e-08
+model.layers.9.self_attn.v_proj.weight
+iteration: 1, error: 0.0006508086280084825
+iteration: 2, error: 2.637617207730417e-08
+model.layers.9.self_attn.o_proj.weight
+iteration: 1, error: 0.00064189958353055
+iteration: 2, error: 2.2022379138573034e-08
+model.layers.9.mlp.gate_proj.weight
+iteration: 1, error: 0.0005270396394248345
+iteration: 2, error: 1.7335371305101107e-09
+model.layers.9.mlp.up_proj.weight
+iteration: 1, error: 0.0004863751712610445
+iteration: 2, error: 1.4794214049912358e-09
+model.layers.9.mlp.down_proj.weight
+iteration: 1, error: 0.0004826186870164007
+iteration: 2, error: 1.5514605761572547e-09
+model.layers.10.self_attn.q_proj.weight
+iteration: 1, error: 0.0011271854316424659
+iteration: 2, error: 7.822445114417918e-07
+iteration: 3, error: 2.6569751715637694e-07
+iteration: 4, error: 8.931487700062564e-07
+iteration: 5, error: 1.0374158582148865e-06
+iteration: 6, error: 8.060873091784793e-07
+iteration: 7, error: 3.9295382241224233e-07
+iteration: 8, error: 3.8281663366659586e-08
+model.layers.10.self_attn.k_proj.weight
+iteration: 1, error: 0.0011616126452782918
+iteration: 2, error: 4.97651219276239e-08
+model.layers.10.self_attn.v_proj.weight
+iteration: 1, error: 0.0006444259746762177
+iteration: 2, error: 1.5545740129100211e-06
+iteration: 3, error: 5.319850804297407e-07
+iteration: 4, error: 3.872770007077702e-06
+iteration: 5, error: 4.91234454782208e-06
+iteration: 6, error: 4.049588134134882e-06
+iteration: 7, error: 2.1838133060950874e-06
+iteration: 8, error: 3.7872201339628843e-07
+iteration: 9, error: 1.2032729007317854e-06
+iteration: 10, error: 1.7337887594321118e-06
+model.layers.10.self_attn.o_proj.weight
+iteration: 1, error: 0.0006393508118985242
+iteration: 2, error: 1.849278411768747e-08
+model.layers.10.mlp.gate_proj.weight
+iteration: 1, error: 0.0005249641479390626
+iteration: 2, error: 1.7440007657259965e-09
+model.layers.10.mlp.up_proj.weight
+iteration: 1, error: 0.0004914399968541915
+iteration: 2, error: 1.5018456892094157e-09
+model.layers.10.mlp.down_proj.weight
+iteration: 1, error: 0.00048652043923075837
+iteration: 2, error: 1.5894132874571893e-09
+model.layers.11.self_attn.q_proj.weight
+iteration: 1, error: 0.0010712428904085588
+iteration: 2, error: 4.5584085212404474e-08
+model.layers.11.self_attn.k_proj.weight
+iteration: 1, error: 0.0010682645406622925
+iteration: 2, error: 4.7498317639984086e-08
+model.layers.11.self_attn.v_proj.weight
+iteration: 1, error: 0.0006718288686153471
+iteration: 2, error: 1.938571681336529e-08
+model.layers.11.self_attn.o_proj.weight
+iteration: 1, error: 0.000665566694763733
+iteration: 2, error: 2.131449518560642e-08
+model.layers.11.mlp.gate_proj.weight
+iteration: 1, error: 0.0005234415658241302
+iteration: 2, error: 1.7563071403872493e-09
+model.layers.11.mlp.up_proj.weight
+iteration: 1, error: 0.0004956872879445339
+iteration: 2, error: 1.5359943219028064e-09
+model.layers.11.mlp.down_proj.weight
+iteration: 1, error: 0.0004896744659563678
+iteration: 2, error: 1.5728319012183746e-09
+model.layers.12.self_attn.q_proj.weight
+iteration: 1, error: 0.0010933434455668916
+iteration: 2, error: 4.057146528407609e-08
+model.layers.12.self_attn.k_proj.weight
+iteration: 1, error: 0.0011271168923206658
+iteration: 2, error: 3.880359788124337e-08
+model.layers.12.self_attn.v_proj.weight
+iteration: 1, error: 0.0006634548555498772
+iteration: 2, error: 1.7163026931380468e-06
+iteration: 3, error: 7.935418513003417e-07
+iteration: 4, error: 2.2528803354751135e-06
+iteration: 5, error: 2.531644943998393e-06
+iteration: 6, error: 1.9151873029811083e-06
+iteration: 7, error: 8.910098679633673e-07
+iteration: 8, error: 1.497842664206173e-07
+iteration: 9, error: 7.326875853743409e-07
+iteration: 10, error: 9.240600213016701e-07
+model.layers.12.self_attn.o_proj.weight
+iteration: 1, error: 0.0006578531143998494
+iteration: 2, error: 1.8138279838552847e-08
+model.layers.12.mlp.gate_proj.weight
+iteration: 1, error: 0.0005202859253299238
+iteration: 2, error: 1.7381758859860279e-09
+model.layers.12.mlp.up_proj.weight
+iteration: 1, error: 0.0005002439917604265
+iteration: 2, error: 1.5558240533356273e-09
+model.layers.12.mlp.down_proj.weight
+iteration: 1, error: 0.0004938380115924975
+iteration: 2, error: 1.5892918638951778e-09
+model.layers.13.self_attn.q_proj.weight
+iteration: 1, error: 0.0010828180606127745
+iteration: 2, error: 3.9904227293933496e-08
+model.layers.13.self_attn.k_proj.weight
+iteration: 1, error: 0.0011024718068877667
+iteration: 2, error: 5.2681266088433445e-06
+iteration: 3, error: 2.448999606592905e-06
+iteration: 4, error: 7.097823026369499e-06
+iteration: 5, error: 7.999440727645921e-06
+iteration: 6, error: 6.04976875926554e-06
+iteration: 7, error: 2.835668192174388e-06
+iteration: 8, error: 6.371204290867731e-07
+iteration: 9, error: 2.2931860111995644e-06
+iteration: 10, error: 2.853842735855946e-06
+model.layers.13.self_attn.v_proj.weight
+iteration: 1, error: 0.0006876618886331445
+iteration: 2, error: 1.69165404007934e-08
+model.layers.13.self_attn.o_proj.weight
+iteration: 1, error: 0.0006809872860049468
+iteration: 2, error: 1.8999368228080984e-08
+model.layers.13.mlp.gate_proj.weight
+iteration: 1, error: 0.0005183289035367074
+iteration: 2, error: 1.7282719532873734e-09
+model.layers.13.mlp.up_proj.weight
+iteration: 1, error: 0.0005052601729842276
+iteration: 2, error: 1.5564375102303488e-09
+model.layers.13.mlp.down_proj.weight
+iteration: 1, error: 0.0004977518137969006
+iteration: 2, error: 1.5591598281811718e-09
+model.layers.14.self_attn.q_proj.weight
+iteration: 1, error: 0.0010803291641964456
+iteration: 2, error: 4.301031909748361e-08
+model.layers.14.self_attn.k_proj.weight
+iteration: 1, error: 0.001101206363684139
+iteration: 2, error: 4.46090725526673e-08
+model.layers.14.self_attn.v_proj.weight
+iteration: 1, error: 0.0006751662931558115
+iteration: 2, error: 2.2208482985656196e-08
+model.layers.14.self_attn.o_proj.weight
+iteration: 1, error: 0.0006676763255388971
+iteration: 2, error: 2.2064201400273284e-08
+model.layers.14.mlp.gate_proj.weight
+iteration: 1, error: 0.0005176318115436104
+iteration: 2, error: 1.7364907786165816e-09
+model.layers.14.mlp.up_proj.weight
+iteration: 1, error: 0.0005059434565246971
+iteration: 2, error: 1.5810477433071085e-09
+model.layers.14.mlp.down_proj.weight
+iteration: 1, error: 0.0004985686699890345
+iteration: 2, error: 1.5566928938805824e-09
+model.layers.15.self_attn.q_proj.weight
+iteration: 1, error: 0.0010671586729057755
+iteration: 2, error: 4.0427656881278985e-08
+model.layers.15.self_attn.k_proj.weight
+iteration: 1, error: 0.0011038506494853233
+iteration: 2, error: 4.4486574393445517e-08
+model.layers.15.self_attn.v_proj.weight
+iteration: 1, error: 0.0007019113217503932
+iteration: 2, error: 1.8315054395076187e-08
+model.layers.15.self_attn.o_proj.weight
+iteration: 1, error: 0.0006926872688739095
+iteration: 2, error: 1.5436673797367447e-06
+iteration: 3, error: 9.384053713751888e-07
+iteration: 4, error: 2.334751284503843e-06
+iteration: 5, error: 2.546379670960518e-06
+iteration: 6, error: 1.8812185988536707e-06
+iteration: 7, error: 8.355110656381747e-07
+iteration: 8, error: 1.8404990328238745e-07
+iteration: 9, error: 7.674876983057218e-07
+iteration: 10, error: 9.383240772368308e-07
+model.layers.15.mlp.gate_proj.weight
+iteration: 1, error: 0.000520246683013108
+iteration: 2, error: 1.719173329350413e-09
+model.layers.15.mlp.up_proj.weight
+iteration: 1, error: 0.0005084931119356604
+iteration: 2, error: 1.5543005074743993e-09
+model.layers.15.mlp.down_proj.weight
+iteration: 1, error: 0.0005002957677412911
+iteration: 2, error: 1.51326626780743e-09
+model.layers.16.self_attn.q_proj.weight
+iteration: 1, error: 0.0010592781656163185
+iteration: 2, error: 3.591837672172155e-08
+model.layers.16.self_attn.k_proj.weight
+iteration: 1, error: 0.0010875917797952485
+iteration: 2, error: 5.5532020561962974e-08
+model.layers.16.self_attn.v_proj.weight
+iteration: 1, error: 0.0007315484126144954
+iteration: 2, error: 1.834162175319035e-08
+model.layers.16.self_attn.o_proj.weight
+iteration: 1, error: 0.0007241260355314655
+iteration: 2, error: 1.7377967614879892e-08
+model.layers.16.mlp.gate_proj.weight
+iteration: 1, error: 0.0005240669355882168
+iteration: 2, error: 1.7797251014996788e-09
+model.layers.16.mlp.up_proj.weight
+iteration: 1, error: 0.000508318763398884
+iteration: 2, error: 1.6039686643677006e-09
+model.layers.16.mlp.down_proj.weight
+iteration: 1, error: 0.0005002876437306619
+iteration: 2, error: 1.489046148864119e-09
+model.layers.17.self_attn.q_proj.weight
+iteration: 1, error: 0.0010506517822868066
+iteration: 2, error: 3.727475407175968e-08
+model.layers.17.self_attn.k_proj.weight
+iteration: 1, error: 0.0010741338980570028
+iteration: 2, error: 6.232829188883116e-08
+model.layers.17.self_attn.v_proj.weight
+iteration: 1, error: 0.0007289714913200757
+iteration: 2, error: 1.5743503423271544e-08
+model.layers.17.self_attn.o_proj.weight
+iteration: 1, error: 0.0007247087002150652
+iteration: 2, error: 1.6850238929254748e-08
+model.layers.17.mlp.gate_proj.weight
+iteration: 1, error: 0.0005291380460953454
+iteration: 2, error: 1.7972457138779413e-09
+model.layers.17.mlp.up_proj.weight
+iteration: 1, error: 0.0005067283282014118
+iteration: 2, error: 1.6193240290741873e-09
+model.layers.17.mlp.down_proj.weight
+iteration: 1, error: 0.000500112457173057
+iteration: 2, error: 1.5033614164951141e-09
+model.layers.18.self_attn.q_proj.weight
+iteration: 1, error: 0.0010270139915199226
+iteration: 2, error: 4.3023856161604314e-06
+iteration: 3, error: 2.1039168898705195e-06
+iteration: 4, error: 5.781194325103756e-06
+iteration: 5, error: 6.427232401139619e-06
+iteration: 6, error: 4.80345343775266e-06
+iteration: 7, error: 2.1991349058971724e-06
+iteration: 8, error: 5.129061072008681e-07
+iteration: 9, error: 1.8818492218774275e-06
+iteration: 10, error: 2.3018690895781922e-06
+model.layers.18.self_attn.k_proj.weight
+iteration: 1, error: 0.0010495883923661718
+iteration: 2, error: 3.6006251919495467e-08
+model.layers.18.self_attn.v_proj.weight
+iteration: 1, error: 0.0007635187200958374
+iteration: 2, error: 2.4064330558772143e-08
+model.layers.18.self_attn.o_proj.weight
+iteration: 1, error: 0.0007527977852885835
+iteration: 2, error: 1.7903563593109667e-08
+model.layers.18.mlp.gate_proj.weight
+iteration: 1, error: 0.0005338805316943443
+iteration: 2, error: 1.790128619333037e-09
+model.layers.18.mlp.up_proj.weight
+iteration: 1, error: 0.0005053480725664366
+iteration: 2, error: 1.5917465418663834e-09
+model.layers.18.mlp.down_proj.weight
+iteration: 1, error: 0.0004996839129723782
+iteration: 2, error: 1.489719833694154e-09
+model.layers.19.self_attn.q_proj.weight
+iteration: 1, error: 0.0010146450049170078
+iteration: 2, error: 3.331469270882579e-08
+model.layers.19.self_attn.k_proj.weight
+iteration: 1, error: 0.001033957383753011
+iteration: 2, error: 2.4618928254808125e-06
+iteration: 3, error: 1.0655714384159598e-06
+iteration: 4, error: 3.133261109782597e-06
+iteration: 5, error: 3.5475105249886712e-06
+iteration: 6, error: 2.702703344133099e-06
+iteration: 7, error: 1.2762835239180937e-06
+iteration: 8, error: 2.052401485520966e-07
+iteration: 9, error: 1.0129202159239501e-06
+iteration: 10, error: 1.292378199971085e-06
+model.layers.19.self_attn.v_proj.weight
+iteration: 1, error: 0.0007700231474066167
+iteration: 2, error: 1.8819608844009625e-08
+model.layers.19.self_attn.o_proj.weight
+iteration: 1, error: 0.0007621651016728912
+iteration: 2, error: 1.573253339495851e-08
+model.layers.19.mlp.gate_proj.weight
+iteration: 1, error: 0.0005360022975490445
+iteration: 2, error: 1.7751083602261198e-09
+model.layers.19.mlp.up_proj.weight
+iteration: 1, error: 0.0005054285633623912
+iteration: 2, error: 1.5831952794300415e-09
+model.layers.19.mlp.down_proj.weight
+iteration: 1, error: 0.0005008331398181754
+iteration: 2, error: 1.4821938079800262e-09
+model.layers.20.self_attn.q_proj.weight
+iteration: 1, error: 0.0010212022126143228
+iteration: 2, error: 3.713351012448917e-08
+model.layers.20.self_attn.k_proj.weight
+iteration: 1, error: 0.0010398298220190875
+iteration: 2, error: 3.513886495296335e-08
+model.layers.20.self_attn.v_proj.weight
+iteration: 1, error: 0.0007819621473570722
+iteration: 2, error: 1.7194249234788336e-08
+model.layers.20.self_attn.o_proj.weight
+iteration: 1, error: 0.000777082293199742
+iteration: 2, error: 2.5858814931816417e-06
+iteration: 3, error: 1.364842918937825e-06
+iteration: 4, error: 3.6257842817571684e-06
+iteration: 5, error: 4.014795476034978e-06
+iteration: 6, error: 3.0013592623287623e-06
+iteration: 7, error: 1.366872400775464e-06
+iteration: 8, error: 2.735271064801009e-07
+iteration: 9, error: 1.1839692221551622e-06
+iteration: 10, error: 1.468079722668907e-06
+model.layers.20.mlp.gate_proj.weight
+iteration: 1, error: 0.0005392256743761627
+iteration: 2, error: 1.792406405635464e-09
+model.layers.20.mlp.up_proj.weight
+iteration: 1, error: 0.00050516997321661
+iteration: 2, error: 1.6003071444034076e-09
+model.layers.20.mlp.down_proj.weight
+iteration: 1, error: 0.0005009150587683495
+iteration: 2, error: 1.4706342885474396e-09
+model.layers.21.self_attn.q_proj.weight
+iteration: 1, error: 0.0009982581287212783
+iteration: 2, error: 3.136860949223401e-08
+model.layers.21.self_attn.k_proj.weight
+iteration: 1, error: 0.0010091042536322077
+iteration: 2, error: 3.1510533929500806e-08
+model.layers.21.self_attn.v_proj.weight
+iteration: 1, error: 0.0008061401046447642
+iteration: 2, error: 1.7601905245408686e-08
+model.layers.21.self_attn.o_proj.weight
+iteration: 1, error: 0.0007943278903960878
+iteration: 2, error: 1.593257421559267e-08
+model.layers.21.mlp.gate_proj.weight
+iteration: 1, error: 0.000542983384365648
+iteration: 2, error: 1.7884255435405834e-09
+model.layers.21.mlp.up_proj.weight
+iteration: 1, error: 0.000504420355669606
+iteration: 2, error: 1.5886002038947697e-09
+model.layers.21.mlp.down_proj.weight
+iteration: 1, error: 0.0005009579619187311
+iteration: 2, error: 1.4771634458871837e-09
+model.layers.22.self_attn.q_proj.weight
+iteration: 1, error: 0.0010194353513351539
+iteration: 2, error: 3.662925552415257e-08
+model.layers.22.self_attn.k_proj.weight
+iteration: 1, error: 0.0010321753530892297
+iteration: 2, error: 3.387364064458493e-08
+model.layers.22.self_attn.v_proj.weight
+iteration: 1, error: 0.0008091119007493295
+iteration: 2, error: 2.488400428320352e-08
+model.layers.22.self_attn.o_proj.weight
+iteration: 1, error: 0.0007962926244397601
+iteration: 2, error: 1.66446238142625e-08
+model.layers.22.mlp.gate_proj.weight
+iteration: 1, error: 0.0005462418732136208
+iteration: 2, error: 1.7790317681175202e-09
+model.layers.22.mlp.up_proj.weight
+iteration: 1, error: 0.0005042397700854767
+iteration: 2, error: 1.5742316157028425e-09
+model.layers.22.mlp.down_proj.weight
+iteration: 1, error: 0.000501196833199048
+iteration: 2, error: 1.4853896393907623e-09
+model.layers.23.self_attn.q_proj.weight
+iteration: 1, error: 0.0010123680927570146
+iteration: 2, error: 2.2260262675906497e-06
+iteration: 3, error: 8.795625509266029e-07
+iteration: 4, error: 2.716333711568166e-06
+iteration: 5, error: 3.10515304825292e-06
+iteration: 6, error: 2.381593015187708e-06
+iteration: 7, error: 1.1383521175375545e-06
+iteration: 8, error: 1.6880802523443603e-07
+iteration: 9, error: 8.76429564583241e-07
+iteration: 10, error: 1.1298761025985174e-06
+model.layers.23.self_attn.k_proj.weight
+iteration: 1, error: 0.0010199195402036702
+iteration: 2, error: 2.9960813767136256e-08
+model.layers.23.self_attn.v_proj.weight
+iteration: 1, error: 0.0008469564584145901
+iteration: 2, error: 1.8508010044182687e-08
+model.layers.23.self_attn.o_proj.weight
+iteration: 1, error: 0.0008365023236540115
+iteration: 2, error: 1.8551599584266612e-08
+model.layers.23.mlp.gate_proj.weight
+iteration: 1, error: 0.0005461755858104224
+iteration: 2, error: 1.750194671675209e-09
+model.layers.23.mlp.up_proj.weight
+iteration: 1, error: 0.0005067685078252558
+iteration: 2, error: 1.5604018889038817e-09
+model.layers.23.mlp.down_proj.weight
+iteration: 1, error: 0.00050417692083423
+iteration: 2, error: 1.5105816559810956e-09
+model.layers.24.self_attn.q_proj.weight
+iteration: 1, error: 0.0009842395803157562
+iteration: 2, error: 3.495862270031844e-08
+model.layers.24.self_attn.k_proj.weight
+iteration: 1, error: 0.0009893842324380192
+iteration: 2, error: 3.5748821560057044e-08
+model.layers.24.self_attn.v_proj.weight
+iteration: 1, error: 0.0008392468687589119
+iteration: 2, error: 1.79028224777001e-08
+model.layers.24.self_attn.o_proj.weight
+iteration: 1, error: 0.0008245699738717678
+iteration: 2, error: 1.6487874850587764e-08
+model.layers.24.mlp.gate_proj.weight
+iteration: 1, error: 0.0005474963234108272
+iteration: 2, error: 1.7400254196043762e-09
+model.layers.24.mlp.up_proj.weight
+iteration: 1, error: 0.0005083308751943789
+iteration: 2, error: 1.5534919987640904e-09
+model.layers.24.mlp.down_proj.weight
+iteration: 1, error: 0.0005060469948988017
+iteration: 2, error: 1.5230882794828146e-09
+model.layers.25.self_attn.q_proj.weight
+iteration: 1, error: 0.0009925776017068746
+iteration: 2, error: 3.292738945924521e-08
+model.layers.25.self_attn.k_proj.weight
+iteration: 1, error: 0.0009957453399603846
+iteration: 2, error: 2.6051960504914882e-08
+model.layers.25.self_attn.v_proj.weight
+iteration: 1, error: 0.0008708352451116315
+iteration: 2, error: 1.903259958841868e-08
+model.layers.25.self_attn.o_proj.weight
+iteration: 1, error: 0.0008586512076574706
+iteration: 2, error: 1.869178897965743e-08
+model.layers.25.mlp.gate_proj.weight
+iteration: 1, error: 0.0005484717843779762
+iteration: 2, error: 1.7222994550338469e-09
+model.layers.25.mlp.up_proj.weight
+iteration: 1, error: 0.0005105476141310309
+iteration: 2, error: 1.5426787820255195e-09
+model.layers.25.mlp.down_proj.weight
+iteration: 1, error: 0.0005084863418853794
+iteration: 2, error: 1.543753101696979e-09
+model.layers.26.self_attn.q_proj.weight
+iteration: 1, error: 0.0009767582101699239
+iteration: 2, error: 3.306658748490285e-08
+model.layers.26.self_attn.k_proj.weight
+iteration: 1, error: 0.0009845315680718004
+iteration: 2, error: 3.0661506668170884e-08
+model.layers.26.self_attn.v_proj.weight
+iteration: 1, error: 0.0008845727766719813
+iteration: 2, error: 6.280633638051077e-08
+model.layers.26.self_attn.o_proj.weight
+iteration: 1, error: 0.0008788337589257804
+iteration: 2, error: 2.3222451153797654e-08
+model.layers.26.mlp.gate_proj.weight
+iteration: 1, error: 0.0005499336909001219
+iteration: 2, error: 1.7067744095646229e-09
+model.layers.26.mlp.up_proj.weight
+iteration: 1, error: 0.0005123371660009484
+iteration: 2, error: 1.5285256151424512e-09
+model.layers.26.mlp.down_proj.weight
+iteration: 1, error: 0.0005100598413861894
+iteration: 2, error: 1.5432222706372522e-09
+model.layers.27.self_attn.q_proj.weight
+iteration: 1, error: 0.0010132565230735748
+iteration: 2, error: 3.4788899247417357e-08
+model.layers.27.self_attn.k_proj.weight
+iteration: 1, error: 0.0010228330925628032
+iteration: 2, error: 2.98462798694201e-08
+model.layers.27.self_attn.v_proj.weight
+iteration: 1, error: 0.0008863778319506467
+iteration: 2, error: 1.9321611599634834e-08
+model.layers.27.self_attn.o_proj.weight
+iteration: 1, error: 0.0008847878962479783
+iteration: 2, error: 2.1997046423110834e-08
+model.layers.27.mlp.gate_proj.weight
+iteration: 1, error: 0.0005502743729581111
+iteration: 2, error: 1.692337136963546e-09
+model.layers.27.mlp.up_proj.weight
+iteration: 1, error: 0.0005148874327996422
+iteration: 2, error: 1.5239113882587016e-09
+model.layers.27.mlp.down_proj.weight
+iteration: 1, error: 0.0005127139252363344
+iteration: 2, error: 1.5509442432732334e-09
+model.layers.28.self_attn.q_proj.weight
+iteration: 1, error: 0.0009845396690477896
+iteration: 2, error: 3.054253735234407e-08
+model.layers.28.self_attn.k_proj.weight
+iteration: 1, error: 0.000996213588811861
+iteration: 2, error: 5.74687287772384e-07
+iteration: 3, error: 5.535721799474604e-07
+iteration: 4, error: 1.1491663563649343e-06
+iteration: 5, error: 1.193453711014307e-06
+iteration: 6, error: 8.464691904631816e-07
+iteration: 7, error: 3.431258584271963e-07
+iteration: 8, error: 1.1833840343038591e-07
+iteration: 9, error: 3.8600758616548507e-07
+iteration: 10, error: 4.5017963140579947e-07
+model.layers.28.self_attn.v_proj.weight
+iteration: 1, error: 0.0009143925936914235
+iteration: 2, error: 1.9519117898914544e-08
+model.layers.28.self_attn.o_proj.weight
+iteration: 1, error: 0.0009104775036457256
+iteration: 2, error: 1.8600506683906234e-08
+model.layers.28.mlp.gate_proj.weight
+iteration: 1, error: 0.0005477221027102797
+iteration: 2, error: 1.670627655142954e-09
+model.layers.28.mlp.up_proj.weight
+iteration: 1, error: 0.0005197552063688892
+iteration: 2, error: 1.5324725335822422e-09
+model.layers.28.mlp.down_proj.weight
+iteration: 1, error: 0.0005156866596943832
+iteration: 2, error: 1.5262379861146219e-09
+model.layers.29.self_attn.q_proj.weight
+iteration: 1, error: 0.0009592856306594754
+iteration: 2, error: 2.9006157295079487e-08
+model.layers.29.self_attn.k_proj.weight
+iteration: 1, error: 0.0009674214225032445
+iteration: 2, error: 4.1806439283819646e-08
+model.layers.29.self_attn.v_proj.weight
+iteration: 1, error: 0.0009180320333768561
+iteration: 2, error: 2.475632837959345e-08
+model.layers.29.self_attn.o_proj.weight
+iteration: 1, error: 0.0009211221980602095
+iteration: 2, error: 1.9441169560269056e-08
+model.layers.29.mlp.gate_proj.weight
+iteration: 1, error: 0.0005487199667489352
+iteration: 2, error: 1.664731467701252e-09
+model.layers.29.mlp.up_proj.weight
+iteration: 1, error: 0.0005243298006578791
+iteration: 2, error: 1.5489089531231913e-09
+model.layers.29.mlp.down_proj.weight
+iteration: 1, error: 0.0005172039928986192
+iteration: 2, error: 1.5097972949328122e-09
+model.layers.30.self_attn.q_proj.weight
+iteration: 1, error: 0.0009653753601958756
+iteration: 2, error: 2.8933806057303384e-08
+model.layers.30.self_attn.k_proj.weight
+iteration: 1, error: 0.0009782525288487684
+iteration: 2, error: 2.5575137798175465e-08
+model.layers.30.self_attn.v_proj.weight
+iteration: 1, error: 0.0009393715430342592
+iteration: 2, error: 1.880367720879195e-08
+model.layers.30.self_attn.o_proj.weight
+iteration: 1, error: 0.000943924217840367
+iteration: 2, error: 1.8545278692906717e-08
+model.layers.30.mlp.gate_proj.weight
+iteration: 1, error: 0.0005607028189104875
+iteration: 2, error: 1.7193095235898115e-09
+model.layers.30.mlp.up_proj.weight
+iteration: 1, error: 0.0005327441907973255
+iteration: 2, error: 1.6016667725229863e-09
+model.layers.30.mlp.down_proj.weight
+iteration: 1, error: 0.0005132068058846695
+iteration: 2, error: 1.4942438610064214e-09
+model.layers.31.self_attn.q_proj.weight
+iteration: 1, error: 0.000976933042930754
+iteration: 2, error: 5.017257633884729e-08
+model.layers.31.self_attn.k_proj.weight
+iteration: 1, error: 0.0010121410401985923
+iteration: 2, error: 4.0360530748307885e-08
+model.layers.31.self_attn.v_proj.weight
+iteration: 1, error: 0.0008557771476279425
+iteration: 2, error: 1.7642060956029418e-08
+model.layers.31.self_attn.o_proj.weight
+iteration: 1, error: 0.000864606883317163
+iteration: 2, error: 2.0657240258043593e-08
+model.layers.31.mlp.gate_proj.weight
+iteration: 1, error: 0.0005837763279828111
+iteration: 2, error: 1.8254658819742228e-09
+model.layers.31.mlp.up_proj.weight
+iteration: 1, error: 0.0005523664928887777
+iteration: 2, error: 1.7008981179078874e-09
+model.layers.31.mlp.down_proj.weight
+iteration: 1, error: 0.0005099629077514986
+iteration: 2, error: 1.5459549386912513e-09

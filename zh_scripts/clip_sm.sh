@@ -9,7 +9,7 @@
 #SBATCH --mail-user=V.Moskvoretskii@skoltech.ru
 
 #SBATCH --output=zh_logs/log_compr.txt
-#SBATCH --time=1-00
+#SBATCH --time=2-00
 
 #SBATCH --mem=100G
 
@@ -19,16 +19,12 @@
 
 #SBATCH --gpus=4
 
-srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trinity/home/v.moskvoretskii/images/new_clipped_sm.sif bash -c '
-    ls;
-    cd /home;
-    ls;
+srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trinity/home/v.moskvoretskii/images/new_clipped_sm_fixed_peft.sif bash -c '
     export HF_HOME=/home/cache/;
     export HF_TOKEN=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;
     export SAVING_DIR=/home/cache/;
     export WANDB_API_KEY=2b740bffb4c588c7274a6e8cf4e39bd56344d492;
     cd /home/LLM_Compression;
-    ls;
     nvidia-smi;
     pip list;
     CUDA_LAUNCH_BLOCKING=1;

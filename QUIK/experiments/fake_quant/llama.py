@@ -215,9 +215,10 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                         current_w_bits = 8
 
                 if getattr(subset[name], 'quantizer', False):
-                    ste_scales = subset[name].quantizer.s.detach()
+                    ste_scales = None
+                   # ste_scales = subset[name].quantizer.s.detach()
                     # replace with regular forward to not perform quantization on forward
-                    subset[name].forward = funcType(unquantized_forward, subset[name])
+                   # subset[name].forward = funcType(unquantized_forward, subset[name])
                 else:
                     ste_scales = None
                 
@@ -414,7 +415,7 @@ if __name__ == '__main__':
 
     save_path = args.path_to_save_quant_model
     model.save_pretrained(save_path)
-
+    torch.save(save_dict, f"{save_path}/quantazed_model.pt")
     datasets = ['wikitext2']
     for dataset in datasets:
         dataloader, testloader = datautils.get_loaders(

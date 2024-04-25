@@ -97,7 +97,7 @@ class WeightQuantizer(torch.nn.Module):
         self.grid = 100
         self.maxshrink = 0.8
         self.norm = 2.4
-
+        self.init_from_ste = False
         if scales is not None:
             assert sym, "Not symmetric quantization is not supported for initing from STE"
             self.scale = scales

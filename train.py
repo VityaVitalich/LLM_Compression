@@ -260,6 +260,7 @@ def run_train(
             lora_dropout=config.lora_dropout,
             target_modules=config.lora_target_modules,
             init_lora_weights=True,
+            use_dora=config.dora
         )
         model = get_peft_model(model, lora_config)
 
@@ -472,6 +473,7 @@ def main():
         per_device_eval_batch_size=config.per_device_eval_batch_size,  # 2,
         gradient_accumulation_steps=config.gradient_accumulation_steps,  # 16,
         gradient_checkpointing=config.gradient_checkpointing,  # False,
+        max_steps=config.max_steps,
         save_strategy=config.save_strategy,
         save_steps=config.save_steps,
         evaluation_strategy=config.evaluation_strategy,
