@@ -894,7 +894,7 @@ def llama_sequential(model, dataloader, data_args, estimator_args):
                     )
                 elif estimator_args['estimator'] == 'OBDx2_Estimator':
                     agg = estimator_args['agg']
-                    estimator = OBS_Estimator(
+                    estimator = OBDx2_Estimator(
                         name=name, ncolumns=ncolumns, device=device, agg=agg
                     )
                 elif estimator_args['estimator'] == 'Wanda_Estimator':
