@@ -41,7 +41,7 @@ from peft import (
     TaskType,
     LoraConfig
 )
-
+from peft.tuners import lora
 
 
 from quant_utils import get_fp_llama, make_layer_bits, prepare_llama_quant
@@ -312,6 +312,23 @@ def load_hf_datasets(
 
         return raw_datasets
 
+def init_lora_adapters(path_to_lora_adapters, model):
+    module_name_dict = {name: module for name, module in model.model.named_modules()}
+
+    for name, param in module_name_dict.items():
+        if isinstance(param, lora.Linear):
+            path_to_lora_adapter = path_to_lora_adapters / f'{name}.pt'
+            adapters = torch.load(path_to_lora_adapter)
+
+            param_dtype = param.weight.dtype
+            param_device = param.weight.device
+            param.lora_A.default.weight.data = \
+                adapters['adapter_A'].to(dtype=param_dtype, device=param_device)
+            param.lora_B.default.weight.data = \
+                adapters['adapter_B'].to(dtype=param_dtype, device=param_device)
+
+    print(f'lora adapters have been initialized from {path_to_lora_adapters}', flush=True)
+
 def read_config(conf_path, func_name: str):
     if isinstance(conf_path, str):
         conf_path = Path(conf_path)
@@ -495,6 +512,11 @@ def run_train(
             # quant_noise_config=model_args.quant_noise_config
         )
         model = get_peft_model(model, lora_config)
+
+        if config['path_to_file_for_lora_init']:
+            path_to_lora_adapters = Path(config['path_to_file_for_lora_init'])
+            init_lora_adapters(path_to_lora_adapters, model)
+
 
     #Load and preprocessing dataset
 
