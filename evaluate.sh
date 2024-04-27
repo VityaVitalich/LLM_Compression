@@ -1,7 +1,7 @@
 #!/bin/bash
 
-MODEL_PATH="/home/LLM_Compression/ckpts/full/Llama13b_tulu_dora_lowlr/checkpoint-500/"
-OUTPUT_PATH="logs/Llama13b_tulu_dora_lowlr_ckpt500/"
+MODEL_PATH="/home/LLM_Compression/ckpts/full/Llama7b_tulu_quik_3bit_lora/checkpoint-500/"
+OUTPUT_PATH="logs/Llama7b_tulu_quik_3bit_true_lora_ckpt500/"
 
 lm_eval \
 --model hf \

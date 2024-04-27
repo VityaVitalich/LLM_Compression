@@ -8,7 +8,6 @@ found here: https://github.com/dganguli/robust-pca
 from __future__ import division, print_function
 
 import numpy as np
-from pylab import plt
 
 class R_pca:
 
