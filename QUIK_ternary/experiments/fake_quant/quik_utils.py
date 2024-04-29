@@ -38,6 +38,7 @@ class QUIK:
             self.inv_col_perm[self.col_perm] = torch.arange(self.col_perm.numel())
         
         self.quant_weight = None
+        self.alpha_scale = None
 
     def add_batch(self, inp, out):
 
@@ -69,6 +70,11 @@ class QUIK:
                 self.H = self.H[self.col_perm, :][:, self.col_perm]
             else:
                 self.quantizer.find_params(W)
+
+            if groupsize == -1:
+                self.alpha_scale = [self.quantizer.alpha]
+            else:
+                self.alpha_scale = []
 
         H = self.H
         del self.H
@@ -115,6 +121,7 @@ class QUIK:
                 if groupsize != -1:
                     if (i1 + i) % groupsize == 0:
                         self.quantizer.find_params(W[:, (i1 + i):(i1 + i + groupsize)])
+                        self.alpha_scale.append(self.quantizer.alpha)
                 
                 q = self.quantizer.quantize(w.unsqueeze(1)).flatten()
                 q_int1[:, i] = q
@@ -137,8 +144,8 @@ class QUIK:
 
         torch.cuda.synchronize()
 
-        self.quantizer.post_quant_find_params(self.layer.weight.data[:, self.int_indices], 
-                                              q_int[:, :(self.columns - self.fp_features)])
+        # self.quantizer.post_quant_find_params(self.layer.weight.data[:, self.int_indices], 
+        #                                       q_int[:, :(self.columns - self.fp_features)])
 
         self.layer.weight.data = Q.reshape(self.layer.weight.shape).to(self.layer.weight.data.dtype)
         self.quant_weight = q_int.reshape(self.layer.weight.shape).to(self.layer.weight.data.dtype)

@@ -76,6 +76,8 @@ def llama_parser():
     parser.add_argument('--w_clip', action='store_true', help='Use clipping for weight quantization')
     parser.add_argument('--w_asym', action='store_true')
     
+    parser.add_argument('--quant_groupsize', type=int, default=-1, help='Number of quant groups')
+    
     parser.add_argument('--int8_down_proj', action='store_true', help='Use INT8 for Down Projection')
     
     # SparseGPT arguments:
@@ -237,7 +239,8 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                     percdamp=args.percdamp,
                     blocksize=128)
                 else:
-                    modules_quik[name].fasterquant(percdamp=args.percdamp, groupsize=-1)
+                    groupsize = args.quant_groupsize
+                    modules_quik[name].fasterquant(percdamp=args.percdamp, groupsize=groupsize)
                 
                 quantizers['model.layers.%d.%s' % (i, name)] = modules_quik[name].quantizer
                 save_dict['model.layers.%d.%s' % (i, name)] = {}
@@ -252,8 +255,8 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                     save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = None
                     save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = None
 
-                save_dict['model.layers.%d.%s' % (i, name)]['alpha'] = modules_quik[name].quantizer.alpha.to("cpu")
-                save_dict['model.layers.%d.%s' % (i, name)]['alpha_pq'] = modules_quik[name].quantizer.alpha_pq.to("cpu")
+                save_dict['model.layers.%d.%s' % (i, name)]['alpha'] = [s.to("cpu") for s in modules_quik[name].alpha_scale]
+                # save_dict['model.layers.%d.%s' % (i, name)]['alpha_pq'] = modules_quik[name].quantizer.alpha_pq.to("cpu")
                 save_dict['model.layers.%d.%s' % (i, name)]['bit'] = torch.tensor(modules_quik[name].quantizer.bits).to("cpu")
                 save_dict['model.layers.%d.%s' % (i, name)]['maxq'] = modules_quik[name].quantizer.maxq.to("cpu")
                 
