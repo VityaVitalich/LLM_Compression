@@ -86,7 +86,7 @@ class WeightQuantizer(torch.nn.Module):
                 raise ValueError('Only ternary and 2/4/8-bit is supported!')
         else:
             if self.bits == 1.58:
-                self.maxq = torch.tensor(1)
+                self.maxq = torch.tensor(2)
             elif self.bits == 2:
                 self.maxq = torch.tensor(3)
             elif self.bits == 3:
