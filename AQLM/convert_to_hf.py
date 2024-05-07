@@ -113,17 +113,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(add_help=True)
 
     parser.add_argument(
-        "model",
+        "--model",
         type=str,
         help="Path to the model to base config on, as in AutoConfig.from_pretrained()",
     )
     parser.add_argument(
-        "in_path",
+        "--in_path",
         type=str,
         help="Path of the checkpoint to convert",
     )
     parser.add_argument(
-        "out_path",
+        "--out_path",
         type=str,
         help="Path to save HF compatible checkpoint to",
     )
@@ -133,6 +133,8 @@ if __name__ == "__main__":
         help="Whether to save in safetensors format",
     )
     args = parser.parse_args()
+    if not os.path.exists(args.out_path):
+        os.makedirs(args.out_path)
 
     old_config = AutoConfig.from_pretrained(args.model)
     metadata = get_metadata(args.in_path)
