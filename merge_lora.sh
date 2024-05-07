@@ -1,8 +1,8 @@
 #!/bin/bash
 
-BASE_MODEL="/home/cache/Llama7b_3bit_128fp_owq_max_3/"
-ADAPTERS_PATH="/home/LLM_Compression/ckpts/lora/Llama7b_tulu_quik_3bit_lora/"
-SAVE_DIR="/home/LLM_Compression/ckpts/full/Llama7b_tulu_quik_3bit_lora/"
+BASE_MODEL="ZhMax/Llama-3-8B-test"
+ADAPTERS_PATH="/home/LLM_Compression/ckpts/lora/Llama8b_tulu_dora/"
+SAVE_DIR="/home/LLM_Compression/ckpts/full/Llama8b_tulu_dora/"
 TOKEN=$HF_TOKEN
 
 python merge_lora.py \

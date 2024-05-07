@@ -28,6 +28,17 @@ if __name__ == '__main__':
             device_map='auto',
             use_auth_token=args.token,
             torch_dtype=torch.bfloat16)
+    tokenizer = AutoTokenizer.from_pretrained(
+            args.base_model,
+            use_auth_token=args.token
+    )
+    if not tokenizer.pad_token_id:
+        tokenizer.pad_token = tokenizer.eos_token
+    embedding_size = base_model.get_input_embeddings().weight.shape[0]
+    print(embedding_size, len(tokenizer))
+    if len(tokenizer) > embedding_size:
+        base_model.resize_token_embeddings(len(tokenizer))
+
 
     # Iterate over all items in the parent directory
     for item in os.listdir(parent_directory):

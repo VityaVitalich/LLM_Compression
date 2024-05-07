@@ -9,7 +9,7 @@
 #SBATCH --mail-user=V.Moskvoretskii@skoltech.ru
 
 #SBATCH --output=zh_logs/log_compr.txt
-#SBATCH --time=2-00
+#SBATCH --time=1-00
 
 #SBATCH --mem=100G
 

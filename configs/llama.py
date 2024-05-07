@@ -16,33 +16,34 @@ def model_configs():
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = '/home/cache/Llama13b_4bit_128fp_owq_max_4' # "meta-llama/Llama-2-7b-hf"
+    config.model_name_or_path = '/home/cache/Llama8b_4bit_128fp_owq_max_4/' # "meta-llama/Llama-2-7b-hf"
     config.model_config_name = None
     config.tokenizer_name = None
-    config.token = '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'
+    config.token = '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'
 
     ### SAVING DIRS ###
     config.cache_dir = '/home/cache/'
-    config.output_dir = '/home/LLM_Compression/ckpts/lora/Llama13b_tulu_quik_4bit_lora_lowlr/'
+    config.output_dir = '/home/LLM_Compression/ckpts/lora/Llama8b_tulu_quik_4bit_lora/'
     
     ### TRAINING ###
     config.learning_rate = 1e-5
+    config.warmup_steps = 30
     config.weight_decay = 0
     config.seed = 11
     config.num_train_epochs = 1
     config.max_steps = 1000 # set to -1 when not used
-    config.per_device_train_batch_size = 1
+    config.per_device_train_batch_size = 2
     config.per_device_eval_batch_size = 2
     config.gradient_accumulation_steps = 16
     config.gradient_checkpointing = False
     config.report_to = 'wandb'
-    config.run_name = 'Llama13b_tulu_quik_4bit_lora_lowlr'
+    config.run_name = 'Llama8b_tulu_quik_4bit_lora'
     ### eval ###
     config.evaluation_strategy = 'no'
     config.eval_steps = 125
     ### save ###
     config.save_strategy = 'steps'
-    config.save_steps = 125
+    config.save_steps = 500
 
 
     ### SOFTMAX CLIP ###
@@ -69,12 +70,12 @@ def model_configs():
     ### STE ###
     ste = config.ste = ml_collections.ConfigDict()
     ste.enable = False
-    ste.path_to_act_scales = '/home/LLM_Compression/QUIK/experiments/act_scales/llama13b_owq_w3_ptb_max.pt'
+    ste.path_to_act_scales = '/home/LLM_Compression/QUIK/experiments/act_scales/llama3_8b_obs_w2_ptb_max.pt'
     ste.fp_features_num = 128
-    ste.layer_bits = {'q': 3, 'k': 3, 'v': 3, 'o': 3, 'down': 3, 'gate': 3, 'up': 3}
+    ste.layer_bits = {'q': 2, 'k': 2, 'v': 2, 'o': 2, 'down': 2, 'gate': 2, 'up': 2}
     ste.block_size = 64
     ste.learnable_scales = True
-    ste.quik_scales_path = '/home/cache/Llama13b_3bit_128fp_owq_max_3/quantazed_model.pt' # either put None
+    ste.quik_scales_path = '/home/cache/Llama8b_2bit_128fp_owq_max_2/quantazed_model.pt' # either put None
 
     ### Distillation ###
     config.distillation = False
