@@ -1,9 +1,11 @@
-logs/
 figs/
+old_logs/
+zh_logs/
+ckpts/
 wandb/
 *.pickle
 weights/
-
+smoothquant/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -11,10 +11,10 @@ act_scale_dir = os.path.join(os.path.dirname(os.path.dirname(current_file_path))
 def skip(*args, **kwargs):
     pass
 
-def find_layers(module, layers=[torch.nn.Linear,
+def find_layers(module, layers=(torch.nn.Linear,
                                 quant.ActQuantWrapper,
-                                transformers.models.falcon.modeling_falcon.FalconLinear], name=''):
-    if type(module) in layers:
+                                transformers.models.falcon.modeling_falcon.FalconLinear), name=''):
+    if isinstance(module, layers):#type(module) in layers:
         return {name: module}
     res = {}
     for name1, child in module.named_children():
@@ -53,9 +53,10 @@ def get_llama(model, hf_token):
     torch.nn.init.kaiming_uniform_ = skip
     torch.nn.init.uniform_ = skip
     torch.nn.init.normal_ = skip
-    model = transformers.LlamaForCausalLM.from_pretrained(model, torch_dtype='auto', 
+    model = transformers.AutoModelForCausalLM.from_pretrained(model, torch_dtype=torch.bfloat16, 
                                                           use_auth_token=hf_token,
-                                                          low_cpu_mem_usage=True)
+                                                         # low_cpu_mem_usage=True
+                                                          )
     model.seqlen = 2048
     return model
 

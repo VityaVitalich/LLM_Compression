@@ -285,8 +285,8 @@ class LsqQuan(nn.Module):
         xmax = torch.maximum(x.max(1)[0], tmp)
         xmax = torch.maximum(torch.abs(xmin), xmax)
         tmp = xmin < 0
-        if torch.any(tmp):
-            xmin[tmp] = -xmax[tmp]
+        #if torch.any(tmp):
+         #   xmin[tmp] = -xmax[tmp]
         tmp = (xmin == 0) & (xmax == 0)
         xmin[tmp] = -1
         xmax[tmp] = +1
@@ -1186,6 +1186,9 @@ class LlamaDecoderLayer(nn.Module):
                 self.outlier_ids = config.outlier_ids[str(layer_idx)]
             self.block_size = config.block_size
             self.learnable_scales = config.learnable_scales
+
+            if self.learnable_scales:
+                self.set_learnable_scales()
 
     def forward(
         self,

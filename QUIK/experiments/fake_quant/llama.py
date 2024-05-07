@@ -10,7 +10,13 @@ import torch
 import quik_utils
 import quant
 import sparseGPT_utils
+import types
+import torch.nn.functional as F
 DEV = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+funcType = types.MethodType
+
+def unquantized_forward(self, input: torch.Tensor) -> torch.Tensor:
+    return F.linear(input, self.weight, self.bias)
 
 def llama_parser():
     parser = argparse.ArgumentParser()
@@ -207,8 +213,17 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 if 'down_proj' in name:
                     if args.int8_down_proj:
                         current_w_bits = 8
+
+                if getattr(subset[name], 'quantizer', False):
+                    ste_scales = None
+                   # ste_scales = subset[name].quantizer.s.detach()
+                    # replace with regular forward to not perform quantization on forward
+                   # subset[name].forward = funcType(unquantized_forward, subset[name])
+                else:
+                    ste_scales = None
+                
                 modules_quik[name].quantizer.configure(
-                    current_w_bits, perchannel=True, sym=not(args.w_asym), mse=args.w_clip
+                    current_w_bits, perchannel=True, sym=not(args.w_asym), mse=args.w_clip, scales=ste_scales
                 )
 
             def add_batch(name):
@@ -220,6 +235,7 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 handles.append(subset[name].register_forward_hook(add_batch(name)))
             for j in range(args.nsamples):
                 outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
+            #    print('after cur layer', outs[j].isnan().sum())
             for h in handles:
                 h.remove()
 
@@ -256,7 +272,8 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
 
         for j in range(args.nsamples):
             outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
-
+           # outs[j] = torch.clip(outs[j], min=torch.finfo(torch.bfloat16).min, max=torch.finfo(torch.bfloat16).max)
+           # print('after outs', (~outs[j].isfinite()).sum(), outs[j].isnan().sum())
         layers[i] = layer.cpu()
         del layer
         del modules_quik 
@@ -400,7 +417,7 @@ if __name__ == '__main__':
 
     save_path = args.path_to_save_quant_model
     model.save_pretrained(save_path)
-
+    torch.save(save_dict, f"{save_path}/quantazed_model.pt")
     datasets = ['wikitext2']
     for dataset in datasets:
         dataloader, testloader = datautils.get_loaders(

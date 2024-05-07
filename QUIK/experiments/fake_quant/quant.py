@@ -62,7 +62,7 @@ class WeightQuantizer(torch.nn.Module):
 
     def configure(
             self,
-            bits, perchannel=False, sym=True, mse=False,
+            bits, perchannel=False, sym=True, mse=False, scales=None
         ):
         self.bits = bits
         if sym:
@@ -97,6 +97,11 @@ class WeightQuantizer(torch.nn.Module):
         self.grid = 100
         self.maxshrink = 0.8
         self.norm = 2.4
+        self.init_from_ste = False
+        if scales is not None:
+            assert sym, "Not symmetric quantization is not supported for initing from STE"
+            self.scale = scales
+            self.init_from_ste = True
 
     def find_params(self, x):
         if self.bits == 16:
@@ -125,8 +130,11 @@ class WeightQuantizer(torch.nn.Module):
 
         
         if self.sym:
-            self.alpha = xmax
-            self.scale = xmax / self.maxq
+            if not self.init_from_ste:
+                self.alpha = xmax
+                self.scale = xmax / self.maxq
+            else:
+                self.alpha = self.scale * self.maxq
             self.zero = torch.zeros_like(self.scale)
         else:
             self.alpha = xmax - xmin
