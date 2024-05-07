@@ -480,6 +480,7 @@ def main():
         eval_steps=config.eval_steps,
         weight_decay=config.weight_decay,  # 0.1,
         warmup_ratio=0.03,
+        warmup_steps=config.warmup_steps,
         lr_scheduler_type="cosine",
         logging_steps=1,
         do_train=True,
