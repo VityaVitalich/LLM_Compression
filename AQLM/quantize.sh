@@ -16,14 +16,10 @@ python main.py $MODEL_PATH $DATASET_PATH \
  --finetune_adam_beta1=0.90 \
  --finetune_adam_beta2=0.95 \
  --finetune_batch_size=32 \
-# --finetune_relative_mse_tolerance=0.001 \
- --local_batch_size=4 \
+ --local_batch_size=2 \
  --finetune_max_epochs=50 \
-# --finetune_early_stop=3 \
  --finetune_keep_best \
-# --local_batch_size=1 \
  --offload_activations \
  --save $SAVE_PATH \
  --wandb 
-# --resume \
 
