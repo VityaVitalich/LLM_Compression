@@ -33,7 +33,7 @@ class SparseGPT:
         W = layer.weight.data.clone()
         self.rows = W.shape[0]
         self.columns = W.shape[1]
-        self.H = torch.zeros((self.columns, self.columns), device=self.dev)
+        self.H = torch.zeros((self.columns, self.columns), device=self.dev, dtype=torch.float64)
         self.nsamples = 0
         
         # Outliers
@@ -52,6 +52,7 @@ class SparseGPT:
             self.inv_col_perm[self.col_perm] = torch.arange(self.col_perm.numel())
 
     def add_batch(self, inp, out, blocksize=1024):
+       # print('start inp nan', inp.isnan().sum())
         if DEBUG:
             self.inp1 = inp
             self.out1 = out
@@ -63,18 +64,21 @@ class SparseGPT:
                 inp = inp.reshape((-1, inp.shape[-1]))
             inp = inp.t()
         self.H *= self.nsamples / (self.nsamples + tmp)
+       # print('before', self.H.isnan().sum())
         self.nsamples += tmp
+       # print(inp.isnan().sum())
         inp = math.sqrt(2 / self.nsamples) * inp.float()
+       # print(inp.isnan().sum())
         self.H += inp.matmul(inp.t())
-
+       # print('after', self.H.isnan().sum())
     def fasterprune(
         self, sparsity, prunen=0, prunem=0, blocksize=128, percdamp=.01
     ):
         W = self.layer.weight.data.clone()
         W = W.float()
         
-        # If we have quantizer, we need to find the quantization parameters
-        # We do it over the integer indices only
+       # # If we have quantizer, we need to find the quantization parameters
+       # # We do it over the integer indices only
         if hasattr(self, 'quantizer'):
             if not self.quantizer.ready():
                 if self.fp_features > 0:
@@ -82,7 +86,7 @@ class SparseGPT:
                 else:
                     self.quantizer.find_params(W)
                     
-        # Permute the weight and the H matrix
+       # # Permute the weight and the H matrix
         if self.fp_features > 0:
             W = W[:, self.col_perm]
             self.H = self.H[self.col_perm, :][:, self.col_perm]
@@ -102,7 +106,7 @@ class SparseGPT:
         H = torch.linalg.cholesky(H)
         H = torch.cholesky_inverse(H)
         H = torch.linalg.cholesky(H, upper=True)
-        Hinv = H
+        Hinv = H.float()
 
         mask = None
 
@@ -164,7 +168,7 @@ class SparseGPT:
                 print(torch.sum(Losses))
 
         torch.cuda.synchronize()
-
+       # print('after quant', (~W.isfinite()).sum())
         self.layer.weight.data = W.reshape(self.layer.weight.shape).to(self.layer.weight.data.dtype)
         if DEBUG:
             print(torch.sum((self.layer(self.inp1) - self.out1) ** 2))

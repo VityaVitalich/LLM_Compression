@@ -235,6 +235,7 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 handles.append(subset[name].register_forward_hook(add_batch(name)))
             for j in range(args.nsamples):
                 outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
+            #    print('after cur layer', outs[j].isnan().sum())
             for h in handles:
                 h.remove()
 
@@ -271,7 +272,8 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
 
         for j in range(args.nsamples):
             outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
-
+           # outs[j] = torch.clip(outs[j], min=torch.finfo(torch.bfloat16).min, max=torch.finfo(torch.bfloat16).max)
+           # print('after outs', (~outs[j].isfinite()).sum(), outs[j].isnan().sum())
         layers[i] = layer.cpu()
         del layer
         del modules_quik 
