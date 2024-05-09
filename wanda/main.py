@@ -28,6 +28,8 @@ def get_llm(model_name, cache_dir="llm_weights"):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, help='LLaMA model')
+    parser.add_argument('--path_to_outliers', type=str, default=None, help='Path to state_dict with metrics for columns')
+    parser.add_argument('--fp_features', type=int, default=0, help='Number of outlier columns')
     parser.add_argument('--seed', type=int, default=0, help='Seed for sampling the calibration data.')
     parser.add_argument('--nsamples', type=int, default=128, help='Number of calibration samples.')
     parser.add_argument('--sparsity_ratio', type=float, default=0, help='Sparsity level')

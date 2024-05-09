@@ -135,6 +135,11 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
     with torch.no_grad():
         inps, outs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, device)
 
+    if args.path_to_outliers:
+        columns_scale = torch.load(args.path_to_outliers)
+        print('columns_scale has been loaded from')
+        print(args.path_to_outliers)
+
     layers = model.model.layers
     for i in range(len(layers)):
         layer = layers[i]
@@ -165,6 +170,15 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
         for name in subset:
             print(f"pruning layer {i} name {name}")
             W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1,-1)))
+
+            if args.fp_features > 0:
+                print(f'fp_features: {args.fp_features}')
+                layer_name = f"model.layers.{i}.{name}"
+                column_scale = columns_scale[layer_name]
+                fp_inds = torch.sort(column_scale)[1][-args.fp_features:]
+
+                max_metric = W_metric.max() + 1 
+                W_metric[:, fp_inds] = max_metric
 
             W_mask = (torch.zeros_like(W_metric) == 1)  ## initialize a mask to be all False
             if prune_n != 0:
