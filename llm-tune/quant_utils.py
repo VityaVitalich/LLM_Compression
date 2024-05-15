@@ -3,8 +3,12 @@ import re
 
 
 def get_fp_inds_for_quik(path_to_act_scales, fp_features_num): 
-    act_scales = torch.load(path_to_act_scales) 
-    fp_indices_in_lin_layers = {str(k): torch.sort(v)[1][-fp_features_num:] for k, v in act_scales.items()} 
+    act_scales = torch.load(path_to_act_scales)
+    if fp_features_num > 0:
+        fp_indices_in_lin_layers = {str(k): torch.sort(v)[1][-fp_features_num:] for k, v in act_scales.items()} 
+    else:
+        fp_indices_in_lin_layers = {str(k): torch.tensor([]) for k, v in act_scales.items()} 
+    
     return fp_indices_in_lin_layers
 
 def extract_pattern(s):
