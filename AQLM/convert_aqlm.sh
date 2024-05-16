@@ -1,6 +1,6 @@
 MODEL='/home/cache/models--meta-llama--Llama-2-7b-hf/snapshots/01c7f73d771dfac7d292323805ebc428287df4f9'
-IN_PATH='/home/cache/aqlm_llama7/'
-OUT_PATH='/home/cache/aqlm_llama7_hf/'
+IN_PATH='/home/cache/aqlm_llama7_repoconf/'
+OUT_PATH='/home/cache/aqlm_llama7_repoconf_hf/'
 
 
 python convert_to_hf.py \

@@ -8,7 +8,7 @@
 
 #SBATCH --mail-user=V.Moskvoretskii@skoltech.ru
 
-#SBATCH --output=zh_logs/aqlm.txt
+#SBATCH --output=zh_logs/ft_aqlm.txt
 #SBATCH --time=2-00
 
 #SBATCH --mem=512G
@@ -32,6 +32,6 @@ srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trini
     nvidia-smi;
     pip list;
     CUDA_LAUNCH_BLOCKING=1;
-    sh quantize.sh;
+    sh finetune.sh;
 '
 

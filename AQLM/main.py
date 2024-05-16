@@ -125,7 +125,8 @@ def get_inps(
             super().__init__()
             self.module = module
 
-        def forward(self, inp, **kwargs):
+        def forward(self, inp, *args, **kwargs):
+           # print(inp, args, kwargs)
             inps[cache["i"] // nsamples_per_device][cache["i"] % nsamples_per_device] = inp
             cache["i"] += 1
             for forward_arg_name in forward_arg_names:
@@ -141,6 +142,7 @@ def get_inps(
                 batch_inps, *_ = batch_inps
             batch_inps = batch_inps.to(device)
             # call model.forward to trigger the Catcher
+           # print(batch_inps)
             model(batch_inps, attention_mask=torch.ones_like(batch_inps))
         except CatcherExit:
             pass  # exit after catcher finished without running the rest of the model layers
@@ -539,6 +541,7 @@ def update_outs(
     device = torch.device(f"cuda:{torch.cuda.current_device()}" if torch.cuda.is_available() else "cpu")
     out_losses = []
     for j in trange(len(inps_tensor), desc="calc outs after quantization", leave=False):
+       # print(forward_args)
         outs_batch = layer(inps_tensor[j].to(device).unsqueeze(0), **forward_args)[0]
         if compute_mse:
             batch_size = outs_batch.shape[0]
