@@ -137,12 +137,21 @@ def llama_sequential(model, dataloader, dev, args):
             sequential = [[k for k in list(full.keys()) if "block_sparse_moe.gate" not in k]]
 
         for names in sequential:
-
             subset = {n: full[n] for n in names}
 
             gptq = {}
             for name in subset:
-                gptq[name] = GPTQ(subset[name])
+                print(f'{names}', end='  ', flush=True) 
+
+                # INIT OUTLIERS
+                outlier_num = args.fp_features
+                layer_scales = None
+                if outlier_num > 0:
+                    layer_scales = act_scales['model.layers.{}.{}'.format(i, name)]
+
+                gptq[name] = GPTQ(subset[name], 
+                    act_scales=layer_scales,
+                    fp_features=outlier_num)
                 gptq[name].quantizer = QClass()
                 gptq[name].quantizer.configure(args.wbits, perchannel=True, sym=args.sym, mse=False)
 
@@ -434,10 +443,24 @@ if __name__ == "__main__":
     parser.add_argument("--hessian-weighted-lookups", action="store_true", default=False)
     parser.add_argument("--only-init-kmeans", action="store_true", default=False)
 
+    ### OUTLIERS 
+
+    parser.add_argument('--fp_features', type=int, default=0, help='Number of features to keep in FP16.')
+    parser.add_argument(
+            '--path_to_act_scales', type=str,
+            help='act_scales to load;',
+            default='../act_scales/Llama-2-7b-hf.pt'
+        )
+
     args = parser.parse_args()
 
     if not args.use_vq:
         args.wbits = int(args.wbits)
+
+    if args.fp_features > 0:
+        relative_path = args.path_to_act_scales
+        act_scales = torch.load(relative_path)
+        print('Loaded act_scales from: ', relative_path)
 
     model = get_llama(args.model, args.model_type)
     model.eval()
