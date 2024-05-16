@@ -55,10 +55,13 @@ def quad_loss_2(W, Q, G):
 
 class GPTQ:
 
-    def __init__(self, layer):
+    def __init__(self, layer, 
+                act_scales=None,
+                fp_features=0):
         self.layer = layer
         self.dev = self.layer.weight.device
         W = layer.weight.data.clone()
+
         if isinstance(self.layer, nn.Conv2d):
             W = W.flatten(1)
         if isinstance(self.layer, transformers.Conv1D):
@@ -67,6 +70,24 @@ class GPTQ:
         self.columns = W.shape[1]
         self.H = torch.zeros((self.columns, self.columns), device=self.dev)
         self.nsamples = 0
+
+
+
+        # OUTLIERS PART
+        self.act_scales = act_scales
+        self.fp_features = fp_features
+        
+        self.int_indices = None
+        self.fp_indices = None
+        self.col_perm = None
+        self.inv_col_perm = None
+        
+        if fp_features > 0:    
+            self.fp_indices = torch.sort(act_scales)[1][-fp_features:]
+            self.int_indices = torch.sort(act_scales)[1][:-fp_features]
+            self.col_perm = act_scales.sort()[1]
+            self.inv_col_perm = torch.zeros_like(self.col_perm)
+            self.inv_col_perm[self.col_perm] = torch.arange(self.col_perm.numel())
 
     def add_batch(self, inp, out):
         if DEBUG:
@@ -217,6 +238,7 @@ class GPTQ:
         hessian_weighted_lookups=False,
         only_init_kmeans=False,
     ):
+        
         W = self.layer.weight.data.clone()
         if isinstance(self.layer, nn.Conv2d):
             W = W.flatten(1)
@@ -228,6 +250,12 @@ class GPTQ:
 
         if not self.quantizer.ready() and not use_vq:
             self.quantizer.find_params(W, weight=True)
+
+        if self.fp_features > 0:
+            # We calculate the quantization parameters only on the integer part of the weights
+            # Then, we permute the columns so the integer part is on the left
+            W = W[:, self.col_perm]
+            self.H = self.H[self.col_perm, :][:, self.col_perm]
 
         H = self.H
         self.G = self.H.clone()
@@ -247,7 +275,10 @@ class GPTQ:
         S = vq_scaling_blocksize = vq_scaling_n_bits = None
         if use_vq:
             vq_dim = self.quantizer.vq_dim
-            groupsize = self.quantizer.get_groupsize(W, groupsize)
+            if self.fp_features:
+                groupsize = self.quantizer.get_groupsize(W[:,-self.fp_features], groupsize)
+            else:
+                groupsize = self.quantizer.get_groupsize(W, groupsize)
             self.assignments = []
             assert blocksize % vq_dim == 0
 
@@ -255,7 +286,10 @@ class GPTQ:
             vq_scaling_n_bits = self.quantizer.vq_scaling_n_bits
             if vq_scaling_blocksize > 0:
                 assert vq_scaling_blocksize % vq_dim == 0
-                S = torch.ones_like(W)
+                if self.fp_features:
+                    S = torch.ones_like(W[:,-self.fp_features])
+                else:
+                    S = torch.ones_like(W)
 
             print(W.shape)
             print(
@@ -277,6 +311,9 @@ class GPTQ:
 
         for i1 in range(0, self.columns, blocksize):
             i2 = min(i1 + blocksize, self.columns)
+            if i1 >= self.columns - self.fp_features and self.fp_features > 0:
+                Q[:, i1:i2] = W[:, i1:i2].clone()
+                continue
             count = i2 - i1
 
             W1 = W[:, i1:i2].clone()
@@ -299,6 +336,10 @@ class GPTQ:
             Hinv1 = Hinv[i1:i2, i1:i2]
 
             for i in range(count):
+                if i + i1 >= self.columns - self.fp_features and self.fp_features > 0:
+                    Q1[:, i] = W1[:, i]
+                    continue
+    
                 if groupsize != -1:
                     if (i1 + i) % groupsize == 0:
                         extra_args = {}
@@ -398,6 +439,11 @@ class GPTQ:
             Q = self.lut_m_step(Q, groupsize, self.quantizer, scale=S, svd_rank=svd_rank)
 
         self.layer.weight.data = Q.reshape(self.layer.weight.shape).to(self.layer.weight.data.dtype)
+
+        # Permut Back the weights
+        if self.fp_features > 0:
+            self.layer.weight.data = self.layer.weight.data[:, self.inv_col_perm]
+       
         if DEBUG:
             print(torch.sum((self.layer(self.inp1) - self.out1) ** 2))
 
