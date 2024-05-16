@@ -11,7 +11,7 @@ def process_json_file(file_path):
         }
 
 # The directory to search in (current directory in this case)
-base_dir = './Llama8b_tulu_dora/'
+base_dir = './Llama7b_tulu/'
 
 # Patterns to match directories
 patterns = ['_']
