@@ -276,7 +276,7 @@ class GPTQ:
         if use_vq:
             vq_dim = self.quantizer.vq_dim
             if self.fp_features:
-                groupsize = self.quantizer.get_groupsize(W[:,-self.fp_features], groupsize)
+                groupsize = self.quantizer.get_groupsize(W[:,:-self.fp_features], groupsize)
             else:
                 groupsize = self.quantizer.get_groupsize(W, groupsize)
             self.assignments = []
@@ -287,7 +287,7 @@ class GPTQ:
             if vq_scaling_blocksize > 0:
                 assert vq_scaling_blocksize % vq_dim == 0
                 if self.fp_features:
-                    S = torch.ones_like(W[:,-self.fp_features])
+                    S = torch.ones_like(W[:,:-self.fp_features])
                 else:
                     S = torch.ones_like(W)
 
