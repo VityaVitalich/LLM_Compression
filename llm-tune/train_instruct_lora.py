@@ -22,7 +22,7 @@ from accelerate.utils import set_seed
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-
+from peft.tuners.lora.layer import Linear as lora_Linear
 # import sys 
 # sys.path.append("/home/LLM_compression/transformers_modified/src")
 
@@ -431,6 +431,7 @@ def run_train(
         tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, **tokenizer_kwargs)
 
     # Load pretrained model
+    print(model_args.model_name_or_path)
     model = AutoModelForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         torch_dtype=torch.bfloat16,
@@ -517,6 +518,11 @@ def run_train(
             path_to_lora_adapters = Path(config['path_to_file_for_lora_init'])
             init_lora_adapters(path_to_lora_adapters, model)
 
+        if config['QuantizedLinear']['training_mode'] == 'train_outlier':
+            for name, param in model.named_parameters():
+                if name.find('fp_weight') != -1:
+                        param.requires_grad = True
+
 
     #Load and preprocessing dataset
 
@@ -544,6 +550,7 @@ def run_train(
     print(len(tokenizer), embedding_size)
 
     raw_datasets = load_hf_datasets(data_args)
+    print(data_args.dataset_name)
 
     # Preprocessing the datasets.
     if "prompt" in raw_datasets["train"].column_names and "completion" in raw_datasets["train"].column_names:
@@ -604,6 +611,8 @@ def run_train(
             trainable_params += param.numel()
 
     print(f"trainable_params: {trainable_params}")
+
+    print(model)
 
     # Initialize our Trainer
     trainer = Trainer(

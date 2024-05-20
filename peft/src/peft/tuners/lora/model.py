@@ -153,9 +153,14 @@ class LoraModel(BaseTuner):
             "init_lora_weights": lora_config.init_lora_weights,
             "use_rslora": lora_config.use_rslora,
             "loaded_in_8bit": getattr(self.model, "is_loaded_in_8bit", False),
-            "loaded_in_4bit": getattr(self.model, "is_loaded_in_4bit", False),
-            "quant_noise_config": lora_config.quant_noise_config
+            "loaded_in_4bit": getattr(self.model, "is_loaded_in_4bit", False)
         }
+
+        if getattr(lora_config, "quant_noise_config", None):
+            kwargs["quant_mask_config"] = lora_config.quant_noise_config
+
+        if getattr(lora_config, "quant_mask_config", None):
+            kwargs["quant_mask_config"] = lora_config.quant_mask_config
 
         quantization_config = get_quantization_config(self.model, method="gptq")
         if quantization_config is not None:
@@ -179,6 +184,7 @@ class LoraModel(BaseTuner):
                 # adding an additional adapter: it is not automatically trainable
                 new_module.requires_grad_(False)
             self._replace_module(parent, target_name, new_module, target)
+            
 
     def _replace_module(self, parent, child_name, new_module, child):
         setattr(parent, child_name, new_module)
@@ -204,7 +210,12 @@ class LoraModel(BaseTuner):
         # dispatch to correct device
         for name, module in new_module.named_modules():
             if (self.prefix in name) or ("ranknum" in name):
-                weight = child.qweight if hasattr(child, "qweight") else child.weight
+                if hasattr(child, "qweight"):
+                    weight = child.qweight
+                elif hasattr(child, "q_weight"):
+                    weight = child.q_weight
+                else:
+                    child.weight
                 module.to(weight.device)
 
     def _mark_only_adapters_as_trainable(self, model: nn.Module) -> None:
