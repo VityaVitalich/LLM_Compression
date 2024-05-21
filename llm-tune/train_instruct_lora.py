@@ -34,7 +34,8 @@ from transformers import (
     LlamaTokenizerFast,
     Trainer,
     DataCollatorForSeq2Seq,
-    TrainingArguments
+    TrainingArguments,
+    TrainerCallback
 )
 from peft import (
     get_peft_model,
@@ -189,6 +190,11 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
 
+
+class SavePeftModelCallback(TrainerCallback):
+    def on_save(self, args, state, control, **kwargs):
+        path_to_save = Path(f'{args.output_dir}/checkpoint-{state.global_step}')
+        kwargs["model"].save_pretrained(path_to_save)
 
 def encode_with_prompt_completion_format(example, tokenizer, max_seq_length):
     '''
@@ -402,6 +408,8 @@ def run_train(
         do_eval = True,
         # report_to = config['report_to']
     )
+
+    trainer_callbacks = []
     
     # If limit on cuda memory is specified enforce the limit
     if model_args.max_memory > 0:
@@ -522,7 +530,8 @@ def run_train(
             for name, param in model.named_parameters():
                 if name.find('fp_weight') != -1:
                         param.requires_grad = True
-
+            save_callback = SavePeftModelCallback()
+            trainer_callbacks.append(save_callback)
 
     #Load and preprocessing dataset
 
@@ -622,7 +631,9 @@ def run_train(
         eval_dataset=eval_dataset,
         tokenizer=tokenizer,
         # Data collator will default to DataCollatorWithPadding, so we change it.
-        data_collator=DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding="longest")
+        data_collator=DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding="longest"),
+        # To save model along with adapters
+        callbacks=[save_callback]
     )
 
     if config['resume_from_checkpoint'] is not None:
