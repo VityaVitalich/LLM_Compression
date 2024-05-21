@@ -193,8 +193,9 @@ class DataTrainingArguments:
 
 class SavePeftModelCallback(TrainerCallback):
     def on_save(self, args, state, control, **kwargs):
-        path_to_save = Path(f'{args.output_dir}/checkpoint-{state.global_step}')
-        kwargs["model"].save_pretrained(path_to_save)
+        path_to_save = Path(f'{args.output_dir}/checkpoint-{state.global_step}/model')
+        kwargs["model"].base_model.save_pretrained(path_to_save)
+        kwargs["tokenizer"].save_pretrained(path_to_save)
 
 def encode_with_prompt_completion_format(example, tokenizer, max_seq_length):
     '''
@@ -410,6 +411,8 @@ def run_train(
     )
 
     trainer_callbacks = []
+    save_callback = SavePeftModelCallback()
+    trainer_callbacks.append(save_callback)
     
     # If limit on cuda memory is specified enforce the limit
     if model_args.max_memory > 0:
@@ -530,8 +533,7 @@ def run_train(
             for name, param in model.named_parameters():
                 if name.find('fp_weight') != -1:
                         param.requires_grad = True
-            save_callback = SavePeftModelCallback()
-            trainer_callbacks.append(save_callback)
+
 
     #Load and preprocessing dataset
 
