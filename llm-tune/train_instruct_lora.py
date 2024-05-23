@@ -420,6 +420,8 @@ def run_train(
     )
 
     trainer_callbacks = []
+    save_callback = SavePeftModelCallback()
+    trainer_callbacks.append(save_callback)
     
     # If limit on cuda memory is specified enforce the limit
     if model_args.max_memory > 0:
@@ -543,8 +545,7 @@ def run_train(
             for name, param in model.named_parameters():
                 if name.find('fp_weight') != -1:
                         param.requires_grad = True
-            save_callback = SavePeftModelCallback()
-            trainer_callbacks.append(save_callback)
+
 
     #Load and preprocessing dataset
 
