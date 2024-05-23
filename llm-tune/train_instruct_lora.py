@@ -193,8 +193,18 @@ class DataTrainingArguments:
 
 class SavePeftModelCallback(TrainerCallback):
     def on_save(self, args, state, control, **kwargs):
-        path_to_save = Path(f'{args.output_dir}/checkpoint-{state.global_step}')
-        kwargs["model"].save_pretrained(path_to_save)
+        path_to_save = Path(f'{args.output_dir}/checkpoint-{state.global_step}/state_dict_fp_weight.pt')
+        model = kwargs["model"]
+        tokenizer = kwargs["tokenizer"]
+
+        state_dict_fp_weight = {}
+        for name, param in model.named_parameters():
+            if name.find('fp_weight') != -1:
+                name = name.split('.')[2:7]
+                name = '.'.join(name) + '.fp_weight'
+                state_dict_fp_weight[name] = param
+        
+        torch.save(state_dict_fp_weight, path_to_save)
 
 def encode_with_prompt_completion_format(example, tokenizer, max_seq_length):
     '''
@@ -508,6 +518,9 @@ def run_train(
         )
 
     if config['use_lora']:
+        model.save_pretrained(config['output_dir'])
+        tokenizer.save_pretrained(config['output_dir'])
+
         task_type = TaskType.CAUSAL_LM
         target_modules = config['lora_target_modules']
         lora_config = LoraConfig(
@@ -633,7 +646,7 @@ def run_train(
         # Data collator will default to DataCollatorWithPadding, so we change it.
         data_collator=DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding="longest"),
         # To save model along with adapters
-        callbacks=[save_callback]
+        callbacks=trainer_callbacks
     )
 
     if config['resume_from_checkpoint'] is not None:
