@@ -416,9 +416,9 @@ def extract_quant_err(model, quant_params, estimator_args, data_args):
     output_path.mkdir(parents=True, exist_ok=True)
     
     adapter_rank = estimator_args['adapter_rank']
-    path_to_cols_metric = estimator_args['path_to_cols_metric']
-    if path_to_cols_metric is not None:
-        layers_scale = torch.load(path_to_cols_metric)
+    # path_to_cols_metric = estimator_args['path_to_cols_metric']
+    # if path_to_cols_metric is not None:
+    #     layers_scale = torch.load(path_to_cols_metric)
 
     layers = model.model.layers
 
@@ -441,32 +441,32 @@ def extract_quant_err(model, quant_params, estimator_args, data_args):
             for name in subset:
                 print(f'{name}', end='  ', flush=True)
 
-            lin_layer = subset[name]
-            lin_layer_name = 'model.layers.{}.{}'.format(i, name)
-            nrows = lin_layer.weight.shape[0]
-            ncolumns = lin_layer.weight.shape[1]
-            w = lin_layer.weight
+                lin_layer = subset[name]
+                lin_layer_name = 'model.layers.{}.{}'.format(i, name)
+                nrows = lin_layer.weight.shape[0]
+                ncolumns = lin_layer.weight.shape[1]
+                w = lin_layer.weight
 
-            quant_layer = quant_params[lin_layer_name]
+                quant_layer = quant_params[lin_layer_name]
 
-            quant_weight = quant_layer['quant_weight']
-            alpha_scale = quant_layer['alpha']
-            bit = quant_layer['bit']
-            fp_weight = quant_layer['fp_weight']
-            fp_indices = quant_layer['fp_indices']
-            
-            estimator = Quant_Estimator(
-                name=name, ncolumns=ncolumns, device=device, 
-                fp_indices=fp_indices, adapter_rank=adapter_rank)
-            
-            w_dq = estimator.dequant(quant_weight, alpha_scale, bit, fp_weight)
+                quant_weight = quant_layer['quant_weight']
+                alpha_scale = quant_layer['alpha']
+                bit = quant_layer['bit']
+                fp_weight = quant_layer['fp_weight']
+                fp_indices = quant_layer['fp_indices']
+                
+                estimator = Quant_Estimator(
+                    name=name, ncolumns=ncolumns, device=device, 
+                    fp_indices=fp_indices, adapter_rank=adapter_rank)
+                
+                w_dq = estimator.dequant(quant_weight, alpha_scale, bit, fp_weight)
 
-            adapter_B, adapter_A = estimator.estimate(w, w_dq)
-            adapters = {}
-            adapters['adapter_A'] = adapter_A
-            adapters['adapter_B'] = adapter_B
-            adapters_path = output_path / f'{lin_layer_name}.pt'
-            torch.save(adapters, adapters_path)
+                adapter_B, adapter_A = estimator.estimate(w, w_dq)
+                adapters = {}
+                adapters['adapter_A'] = adapter_A
+                adapters['adapter_B'] = adapter_B
+                adapters_path = output_path / f'{lin_layer_name}.pt'
+                torch.save(adapters, adapters_path)
 
 def run_quant(config):
 
