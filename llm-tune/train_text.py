@@ -5,6 +5,8 @@ import os
 import random
 import shutil
 from pathlib import Path
+from itertools import chain
+
 
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Sequence
@@ -185,12 +187,20 @@ def load_hf_datasets(
     data_args
 ):
     # Load the dataset
-    if data_args.dataset_name is not None:
-        # Downloading and loading a dataset from the hub.
+    if data_args.streaming:
         raw_datasets = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
-            streaming=data_args.streaming,
+            split=f"train",
+            streaming=True,
+            trust_remote_code=data_args.trust_remote_code
+        )
+
+    else:
+        raw_datasets = load_dataset(
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            streaming=False,
             trust_remote_code=data_args.trust_remote_code
         )
 
@@ -217,23 +227,35 @@ def load_hf_datasets(
             dataset_parts = raw_datasets['validation'].train_test_split(test_size=dataset_frac)
             raw_datasets['validation'] = dataset_parts['test']
 
-        return raw_datasets
+    return raw_datasets
+
+
+
 
 def tokenize_datasets(
     data_args,
     raw_datasets,
     tokenizer
 ):
-    
-    dataset_type = list(raw_datasets.keys())[0]
-    column_names = list(raw_datasets[dataset_type].features)
+    if getattr(raw_datasets, 'keys', None):
+        dataset_type = list(raw_datasets.keys())[0]
+        column_names = list(raw_datasets[dataset_type].features)
+    else:
+        column_names = list(raw_datasets.features)
+
     text_column_name = "text" if "text" in column_names else column_names[0]
 
     def tokenize_function(examples):
         output = tokenizer(examples[text_column_name])
         return output
-    
-    if not data_args.streaming:
+
+    if data_args.streaming:
+        tokenized_datasets = raw_datasets.map(
+            tokenize_function,
+            batched=True,
+            remove_columns=column_names,
+        )
+    else:
         tokenized_datasets = raw_datasets.map(
             tokenize_function,
             batched=True,
@@ -241,12 +263,6 @@ def tokenize_datasets(
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on dataset",
-        )
-    else:
-        tokenized_datasets = raw_datasets.map(
-            tokenize_function,
-            batched=True,
-            remove_columns=column_names,
         )
 
     return tokenized_datasets
@@ -314,19 +330,19 @@ def run_train(
     
     config_dict = dict(config)
     config_dict['data'] = dict(config_dict['data'])
-    config_dict['quant_noise_config'] = dict(config_dict['quant_noise_config'])
     config_dict['outliers'] = dict(config_dict['outliers'])
     config_dict['QuantizedLinear'] = dict(config_dict['QuantizedLinear'])
-    config_dict['NoiseQuant'] = dict(config_dict['NoiseQuant'])
+    config_dict['BitNoiseQuant'] = dict(config_dict['BitNoiseQuant'])
     config = config_dict
 
     data_args = DataTrainingArguments(
         dataset_name = config['data']['dataset_name'],
         dataset_config_name = config['data']['dataset_config_name'],
-        validation_split_percentage = config['data']['validation_split_percentage'],
-        max_seq_length = config['data']['max_seq_length'],
-        dataset_percentage = config['data']['dataset_percentage'],
+        streaming = config_dict['data']['streaming'],
         trust_remote_code = config['data']['trust_remote_code'],
+        max_seq_length = config['data']['max_seq_length'],
+        validation_split_percentage = config['data']['validation_split_percentage'],
+        dataset_percentage = config['data']['dataset_percentage'],
         preprocessing_num_workers = config['data']['preprocessing_num_workers']
     )
 
@@ -426,22 +442,6 @@ def run_train(
             training_mode=config['QuantizedLinear']['training_mode'] 
         )
 
-    if config['NoiseQuant']['add_quant_noise']:
-        noise_config = config['NoiseQuant']
-        outliers_config= config['outliers']
-        outlier_ids, layer_bit = prepare_llama_quant(
-            outliers_config['path_to_act_scales'], 
-            outliers_config['fp_features_num'], 
-            **noise_config['layer_bits']
-        )
-        model.add_quant_noise_to_weight( 
-            layer_bit=layer_bit, 
-            block_size=noise_config['block_size'],
-            fp_cols_num=outliers_config['fp_features_num'],
-            compute_scale=noise_config['compute_scale'], 
-            quant_noise_predict=noise_config['predict']
-        )
-
     if config['use_lora']:
         task_type = TaskType.CAUSAL_LM
         target_modules = config['lora_target_modules']
@@ -459,14 +459,19 @@ def run_train(
 
 
     #Load and preprocessing dataset
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
 
-    tokenizer.pad_token = tokenizer.eos_token
     raw_datasets = load_hf_datasets(data_args)
     tokenized_datasets = tokenize_datasets(data_args, raw_datasets, tokenizer)
     lm_datasets = format_datasets(data_args, tokenized_datasets, tokenizer)
 
-    train_dataset = lm_datasets["train"]
-    eval_dataset = lm_datasets["validation"]
+    if data_args.streaming:
+        train_dataset = lm_datasets.with_format('torch')
+        eval_dataset = None
+    else:
+        train_dataset = lm_datasets["train"]
+        eval_dataset = lm_datasets["validation"]
 
     print("dataset prepared")
     # data_collator = DataCollatorWithMaskForCausalLM(
@@ -518,7 +523,7 @@ def run_train(
     else:
         train_result = trainer.train()
 
-    trainer.save_model()  # Saves the tokenizer too for easy upload
+    # trainer.save_model()  # Saves the tokenizer too for easy upload
 
 
 def main():
