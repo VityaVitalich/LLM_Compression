@@ -26,14 +26,14 @@ from transformers.pytorch_utils import Conv1D
 from peft.tuners.tuners_utils import BaseTunerLayer
 from peft.utils.other import transpose
 
-from .config import LoraConfig
+from .config import SASUTConfig
 
 
-class LoraLayer(BaseTunerLayer):
+class LoRALayer(BaseTunerLayer):
     # All names of layers that may contain (trainable) adapter weights
-    adapter_layer_names = ("lora_A", "lora_B", "lora_embedding_A", "lora_embedding_B")
+    adapter_layer_names = ("sasut_noise")
     # All names of other parameters that may contain adapter-related parameters
-    other_param_names = ("r", "lora_alpha", "scaling", "lora_dropout")
+    other_param_names = ()
 
     def __init__(self, base_layer: nn.Module, **kwargs) -> None:
         self.base_layer = base_layer
@@ -447,372 +447,253 @@ class Linear(nn.Module, LoraLayer):
         rep = super().__repr__()
         return "lora." + rep
 
-
-class Embedding(nn.Module, LoraLayer):
-    # LoRA implemented in a Embedding layer
+class QuantizedLinear(nn.Module):
     def __init__(
         self,
-        base_layer: nn.Module,
-        adapter_name: str,
-        r: int = 0,
-        lora_alpha: int = 1,
-        lora_dropout: float = 0.0,
-        init_lora_weights: Union[bool, str] = True,
-        use_rslora: bool = False,
-        **kwargs,
-    ) -> None:
-        super().__init__()
-        LoraLayer.__init__(self, base_layer)
+        target,
+        adapter_name,
+        sasut_config,
+        outlier_ids
+    ):
+        super(QuantizedLinear, self).__init__()
 
-        self._active_adapter = adapter_name
-        self.update_layer(adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora)
+        self.in_features = target.in_features
+        self.out_features = target,out_features
+        self.q_in_features = None
+        self.fp_in_features = None
+        self.outlier_cols_num = sasut_config['outlier_num']
+        self.device = None
+        self.dtype = dtype
+        self.is_quant_weight = False
+        self.training_mode = None
+        self.quantizer = None
+        self.noisemaker = None
+        self.add_quant_bitnoise = None
+        self.add_quant_bitnoise_predict = None
+        self.outlier_ids = outlier_ids
 
-    def update_layer(self, adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora):
-        if r <= 0:
-            raise ValueError(f"`r` should be a positive integer value but the value passed is {r}")
+        if self.outlier_cols_num == 0:
+            raise ValueError('outlier col num is 0')
 
-        self.r[adapter_name] = r
-        self.lora_alpha[adapter_name] = lora_alpha
-        if lora_dropout > 0.0:
-            lora_dropout_layer = nn.Dropout(p=lora_dropout)
+        elif self.outlier_cols_num > 0:
+            self.q_in_features = self.in_features - self.outlier_cols_num
+            self.fp_in_features = self.outlier_cols_num
+            
+            q_weight = torch.rand((self.out_features, self.q_in_features), 
+                                    dtype=self.dtype)
+            fp_weight = torch.rand((self.out_features, self.fp_in_features), 
+                                    dtype=self.dtype)
+
+            self.q_weight = nn.Parameter(q_weight)
+            self.fp_weight = nn.Parameter(fp_weight)
+            self.bias = None
+
+            mask = torch.ones(self.in_features, 
+                              dtype=torch.bool)
+            col_perm = torch.arange(self.in_features, 
+                                    dtype=torch.int32)
+            inv_col_perm = torch.zeros(col_perm.numel(), 
+                                       dtype=col_perm.dtype)           
+
+            self.register_buffer("mask", mask)
+            self.register_buffer("col_perm", col_perm)
+            self.register_buffer("inv_col_perm", inv_col_perm)
+
         else:
-            lora_dropout_layer = nn.Identity()
+            raise ValueError('Number of outlier columns should be non-negative!')
 
-        self.lora_dropout[adapter_name] = lora_dropout_layer
-        # Actual trainable parameters
-        weight_A = torch.randn((r, self.in_features))
-        weight_B = torch.randn((self.out_features, r))
-        self.lora_embedding_A[adapter_name] = nn.Parameter(weight_A)
-        self.lora_embedding_B[adapter_name] = nn.Parameter(weight_B)
-        if use_rslora:
-            self.scaling[adapter_name] = lora_alpha / math.sqrt(r)
+        self.from_fp_Linear(target, outlier_ids)
+    
+
+    @torch.no_grad
+    def set_mask(self, outlier_ids: torch.tensor):
+        self.mask = torch.ones(self.in_features, 
+                               dtype=torch.bool)
+        self.mask[outlier_ids] = False
+
+        col_ids = torch.arange(self.in_features, 
+                               dtype=torch.int32)
+        self.col_perm = torch.cat([col_ids[self.mask], 
+                                   col_ids[~self.mask]])
+
+        self.inv_col_perm = torch.zeros(self.col_perm.numel(), 
+                                        dtype=self.col_perm.dtype)
+        self.inv_col_perm[self.col_perm] = torch.arange(self.col_perm.numel(),
+                                                        dtype=self.col_perm.dtype)       
+
+    def from_fp_Linear(
+        self,
+        linear: torch.nn.Linear,
+        outlier_ids: List = None,
+    ):
+        if self.outlier_cols_num == 0:            
+            self.weight.data = linear.weight.data
+            self.bias = nn.Parameter(linear.bias.data) if linear.bias is not None else None
+        
+        elif self.outlier_cols_num > 0:
+            if len(outlier_ids) > 0:
+                self.set_mask(outlier_ids)
+    
+            weight = linear.weight.data
+            self.q_weight.data = weight[:, self.mask]
+            self.fp_weight.data = weight[:, ~self.mask]
+
+            self.bias = nn.Parameter(linear.bias.data) if linear.bias is not None else None
+
+           # self.set_training_mode(training_mode)
+           # this is implemented in _mark_only_adapters_as_trainable function
+    
+    # def set_training_mode(
+    #     self, 
+    #     training_mode: Literal['train_full', 'train_outlier', 'train_quant']
+    # ):
+    #     self.training_mode = training_mode
+
+    #     if self.training_mode == 'train_full':
+    #         self.q_weight.requires_grad = True 
+    #         self.fp_weight.requires_grad = True 
+
+    #     elif self.training_mode == 'train_outlier':
+    #         self.q_weight.requires_grad = False
+    #         self.fp_weight.requires_grad = True
+    
+    #     elif self.training_mode == 'train_quant':
+    #         self.q_weight.requires_grad = True
+    #         self.fp_weight.requires_grad = False
+
+    def add_symmetric_quantizer(
+        self,
+        bit: int,
+        learnable_scale: bool = False
+    ):
+                
+        self.quantizer = SymQuant(
+            out_features=self.out_features,
+            bit=bit    
+        )
+        if learnable_scale:
+            self.quantizer.alpha_scale.requires_grad = True
         else:
-            self.scaling[adapter_name] = lora_alpha / r
+            self.quantizer.alpha_scale.requires_grad = False
 
-        if init_lora_weights == "loftq":
-            self.loftq_init(adapter_name)
-        elif init_lora_weights:
-            self.reset_lora_parameters(adapter_name, init_lora_weights)
+    def add_quant_weight(
+        self,
+        alpha_scale: torch.tensor,
+        quant_weight: torch.tensor,
+        fp_weight: torch.tensor = None
+    ):  
+        self.is_quant_weight = True
 
-        base_layer = self.get_base_layer()
-        weight = getattr(base_layer, "weight", None)
-        if weight is not None:
-            # the layer is already completely initialized, this is an update
-            self.to(base_layer.weight.device, dtype=weight.dtype)
-        self.set_adapter(self.active_adapters)
+        if fp_weight is not None:
+            assert self.mask is not None, \
+                'self.mask is None, try using set_mask method'
 
-    def merge(self, safe_merge: bool = False, adapter_names: Optional[List[str]] = None) -> None:
-        """
-        Merge the active adapter weights into the base weights
+            quant_weight = quant_weight.to(dtype=self.dtype, 
+                                           device=self.device)
 
-        Args:
-            safe_merge (`bool`, *optional*):
-                If True, the merge operation will be performed in a copy of the original weights and check for NaNs
-                before merging the weights. This is useful if you want to check if the merge operation will produce
-                NaNs. Defaults to `False`.
-            adapter_names (`List[str]`, *optional*):
-                The list of adapter names that should be merged. If None, all active adapters will be merged. Defaults
-                to `None`.
-        """
-        if self.merged:
-            warnings.warn(
-                f"Already following adapters were merged {','.join(self.merged_adapters)}. "
-                f"You are now additionally merging {','.join(self.active_adapters)}."
-            )
+            quant_weight = quant_weight[:, self.mask]
+            self.q_weight.data = quant_weight
+            self.fp_weight.data = fp_weight.to(dtype=self.dtype, 
+                                               device=self.device)
+            
+        else:
+            self.weight = quant_weight.to(dtype=self.dtype, 
+                                          device=self.device)
 
-        if adapter_names is None:
-            adapter_names = self.active_adapters
+        self.quantizer.alpha_scale.data = alpha_scale.to(dtype=self.dtype, 
+                                                         device=self.device)
 
-        for active_adapter in adapter_names:
-            if active_adapter in self.lora_embedding_A.keys():
-                base_layer = self.get_base_layer()
-                if safe_merge:
-                    # Note that safe_merge will be slower than the normal merge
-                    # because of the copy operation.
-                    orig_weights = base_layer.weight.data.copy()
-                    orig_weights += self.get_delta_weight(active_adapter)
+    def add_quant_bitnoise_to_weight(
+        self, 
+        bit,
+        noise_type,
+        compute_quant_scale,
+        add_quant_noise_predict
+    ):
+        
+        self.add_quant_bitnoise = True
+        self.add_quant_bitnoise_predict = add_quant_noise_predict
 
-                    if not torch.isfinite(orig_weights).all():
-                        raise ValueError(
-                            f"NaNs detected in the merged weights. The adapter {active_adapter} seems to be broken"
-                        )
+        if self.outlier_cols_num == 0:
+            w = self.weight
+        elif self.outlier_cols_num > 0:
+            w = self.q_weight
 
-                    base_layer.weight.data = orig_weights
-                else:
-                    base_layer.weight.data += self.get_delta_weight(active_adapter)
-                self.merged_adapters.append(active_adapter)
-
-    def unmerge(self) -> None:
-        """
-        This method unmerges all merged adapter layers from the base weights.
-        """
-        if not self.merged:
-            warnings.warn("Already unmerged. Nothing to do.")
-            return
-        while len(self.merged_adapters) > 0:
-            active_adapter = self.merged_adapters.pop()
-            if active_adapter in self.lora_embedding_A.keys():
-                self.get_base_layer().weight.data -= self.get_delta_weight(active_adapter)
-
-    def get_delta_weight(self, adapter) -> torch.Tensor:
-        """
-        Compute the delta weight for the given adapter.
-
-        Args:
-            adapter (str):
-                The name of the adapter for which the delta weight should be computed.
-        """
-        device = self.lora_embedding_B[adapter].device
-        dtype = self.lora_embedding_A[adapter].dtype
-
-        # In case users wants to merge the adapter weights that are in
-        # float16 while being on CPU, we need to cast the weights to float32, perform the merge and then cast back to
-        # float16 because the `@` and matmul operation in general is not supported in torch + cpu + fp16.
-        cast_to_fp32 = device.type == "cpu" and dtype == torch.float16
-
-        weight_A = self.lora_embedding_A[adapter]
-        weight_B = self.lora_embedding_B[adapter]
-
-        if cast_to_fp32:
-            weight_A = weight_A.float()
-            weight_B = weight_B.float()
-
-        output_tensor = transpose(weight_B @ weight_A, True) * self.scaling[adapter]
-
-        if cast_to_fp32:
-            output_tensor = output_tensor.to(dtype=dtype)
-
-            # cast back the weights
-            self.lora_embedding_A[adapter] = weight_A.to(dtype)
-            self.lora_embedding_B[adapter] = weight_B.to(dtype)
-
-        return output_tensor
-
-    def _embed(self, input: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
-        base_layer = self.get_base_layer()
-        return F.embedding(
-            input,
-            weight,
-            padding_idx=base_layer.padding_idx,
-            max_norm=base_layer.max_norm,
-            norm_type=base_layer.norm_type,
-            scale_grad_by_freq=base_layer.scale_grad_by_freq,
-            sparse=base_layer.sparse,
+        self.noisemaker = BitNoiseQuant(
+            out_features=w.shape[0],
+            bit=bit,
+            noise_type=noise_type
         )
 
-    def forward(self, x: torch.Tensor, *args: Any, **kwargs: Any) -> torch.Tensor:
-        # TODO: no dtype conversion here, unlike in Linear, is that correct?
-        if self.disable_adapters:
-            if self.merged:
-                self.unmerge()
-            result = self.base_layer(x, *args, **kwargs)
-        elif self.merged:
-            result = self.base_layer(x, *args, **kwargs)
+        if compute_quant_scale:
+            if self.is_quant_weight:
+                w = self.quantizer.dequantize(w)
+            self.noisemaker.compute_alpha_scale(w)
+
+    def _noise_cond(self):
+        noise_cond1 = (self.add_quant_bitnoise and self.training)
+        noise_cond2 = (self.add_quant_bitnoise_predict and (not self.training))
+        noise_cond = noise_cond1 or noise_cond2
+
+        return noise_cond       
+
+    def forward_with_quant_weight(self, input):
+        noise_cond = self._noise_cond()
+        
+        if self.outlier_cols_num == 0:
+            dq_w = self.quantizer.dequantize(self.weight)
+            if noise_cond:
+               dq_w = self.noisemaker(dq_w) 
+
+            return F.linear(input, dq_w, self.bias)
+
+        elif self.outlier_cols_num > 0:
+            dq_w = self.quantizer.dequantize(self.q_weight)
+            if noise_cond:
+               dq_w = self.noisemaker(dq_w) 
+
+            out_w = torch.hstack([dq_w,
+                                  self.fp_weight])
+            out_w = out_w[:, self.inv_col_perm]
+
+            return F.linear(input, out_w, self.bias)
+
+    def forward_with_fp_weight(self, input):
+        noise_cond = self._noise_cond()
+
+        if self.outlier_cols_num == 0:
+            w = self.weight
+            if noise_cond:
+                w = self.noisemaker(w)
+
+            return F.linear(input, w, self.bias)
+        
+        elif self.outlier_cols_num > 0:
+
+            if noise_cond:
+                quant_w_noised = self.noisemaker(self.q_weight)
+                out_w = torch.hstack([quant_w_noised, 
+                                      self.fp_weight])               
+            else:
+                out_w = torch.hstack([self.q_weight, 
+                                      self.fp_weight])
+
+            out_w = out_w[:, self.inv_col_perm]
+
+            return F.linear(input, out_w, self.bias)   
+
+    def forward(self, input):
+        if self.is_quant_weight:
+            out = self.forward_with_quant_weight(input)
+            return out
         else:
-            result = self.base_layer(x, *args, **kwargs)
-            for active_adapter in self.active_adapters:
-                if active_adapter not in self.lora_embedding_A:
-                    continue
-                embedding_A = self.lora_embedding_A[active_adapter].T
-                embedding_B = self.lora_embedding_B[active_adapter].T
-                scaling = self.scaling[active_adapter]
-                after_A = self._embed(x, embedding_A)
-                result += (after_A @ embedding_B) * scaling
-
-        return result
-
-    def __repr__(self) -> str:
-        rep = super().__repr__()
-        return "lora." + rep
-
-
-class Conv2d(nn.Module, LoraLayer):
-    # Lora implemented in a conv2d layer
-    def __init__(
-        self,
-        base_layer: nn.Module,
-        adapter_name: str,
-        r: int = 0,
-        lora_alpha: int = 1,
-        lora_dropout: float = 0.0,
-        init_lora_weights: Union[bool, str] = True,
-        use_rslora: bool = False,
-        **kwargs,
-    ) -> None:
-        super().__init__()
-        LoraLayer.__init__(self, base_layer)
-
-        self._active_adapter = adapter_name
-        self.update_layer(adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora)
-
-    def update_layer(self, adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora):
-        if r <= 0:
-            raise ValueError(f"`r` should be a positive integer value but the value passed is {r}")
-
-        self.r[adapter_name] = r
-        self.lora_alpha[adapter_name] = lora_alpha
-        if lora_dropout > 0.0:
-            lora_dropout_layer = nn.Dropout(p=lora_dropout)
-        else:
-            lora_dropout_layer = nn.Identity()
-
-        self.lora_dropout[adapter_name] = lora_dropout_layer
-        # Actual trainable parameters
-        base_layer = self.get_base_layer()
-        kernel_size = base_layer.kernel_size
-        stride = base_layer.stride
-        padding = base_layer.padding
-        self.lora_A[adapter_name] = nn.Conv2d(self.in_features, r, kernel_size, stride, padding, bias=False)
-        self.lora_B[adapter_name] = nn.Conv2d(r, self.out_features, (1, 1), (1, 1), bias=False)
-        if use_rslora:
-            self.scaling[adapter_name] = lora_alpha / math.sqrt(r)
-        else:
-            self.scaling[adapter_name] = lora_alpha / r
-
-        if init_lora_weights == "loftq":
-            self.loftq_init(adapter_name)
-        elif init_lora_weights:
-            self.reset_lora_parameters(adapter_name, init_lora_weights)
-
-        weight = getattr(base_layer, "weight", None)
-        if weight is not None:
-            # the layer is already completely initialized, this is an update
-            self.to(base_layer.weight.device, dtype=weight.dtype)
-        self.set_adapter(self.active_adapters)
-
-    def merge(self, safe_merge: bool = False, adapter_names: Optional[List[str]] = None) -> None:
-        """
-        Merge the active adapter weights inside the base weights
-
-        Args:
-            safe_merge (`bool`, *optional*):
-                If True, the merge operation will be performed in a copy of the original weights and check for NaNs
-                before merging the weights. This is useful if you want to check if the merge operation will produce
-                NaNs. Defaults to `False`.
-            adapter_names (`List[str]`, *optional*):
-                The list of adapter names that should be merged. If None, all active adapters will be merged. Defaults
-                to `None`.
-        """
-        if self.merged:
-            warnings.warn(
-                f"Already following adapters were merged {','.join(self.merged_adapters)}. "
-                f"You are now additionally merging {','.join(self.active_adapters)}."
-            )
-
-        if adapter_names is None:
-            adapter_names = self.active_adapters
-
-        for active_adapter in adapter_names:
-            if active_adapter in self.lora_A.keys():
-                base_layer = self.get_base_layer()
-                if safe_merge:
-                    # Note that safe_merge will be slower than the normal merge
-                    # because of the copy operation.
-                    orig_weights = base_layer.weight.data.copy()
-                    orig_weights += self.get_delta_weight(active_adapter)
-
-                    if not torch.isfinite(orig_weights).all():
-                        raise ValueError(
-                            f"NaNs detected in the merged weights. The adapter {active_adapter} seems to be broken"
-                        )
-                    base_layer.weight.data = orig_weights
-                else:
-                    base_layer.weight.data += self.get_delta_weight(active_adapter)
-                self.merged_adapters.append(active_adapter)
-
-    def unmerge(self) -> None:
-        """
-        This method unmerges all merged adapter layers from the base weights.
-        """
-        if not self.merged:
-            warnings.warn("Already unmerged. Nothing to do.")
-            return
-        while len(self.merged_adapters) > 0:
-            active_adapter = self.merged_adapters.pop()
-            if active_adapter in self.lora_A.keys():
-                self.get_base_layer().weight.data -= self.get_delta_weight(active_adapter)
-
-    def get_delta_weight(self, adapter) -> torch.Tensor:
-        """
-        Compute the delta weight for the given adapter.
-
-        Args:
-            adapter (str):
-                The name of the adapter for which the delta weight should be computed.
-        """
-        device = self.lora_B[adapter].weight.device
-        dtype = self.lora_A[adapter].weight.dtype
-
-        # In case users wants to merge the adapter weights that are in
-        # float16 while being on CPU, we need to cast the weights to float32, perform the merge and then cast back to
-        # float16 because the `@` and matmul operation in general is not supported in torch + cpu + fp16.
-        cast_to_fp32 = device.type == "cpu" and dtype == torch.float16
-
-        weight_A = self.lora_A[adapter].weight
-        weight_B = self.lora_B[adapter].weight
-
-        if cast_to_fp32:
-            weight_A = weight_A.float()
-            weight_B = weight_B.float()
-
-        # https://github.com/bmaltais/kohya_ss/blob/feb6728762a8f463d15ba936d189d4c3abfaa1ab/networks/lora.py#L117
-        if self.get_base_layer().weight.size()[2:4] == (1, 1):
-            # conv2d 1x1
-            output_tensor = (weight_B.squeeze(3).squeeze(2) @ weight_A.squeeze(3).squeeze(2)).unsqueeze(2).unsqueeze(
-                3
-            ) * self.scaling[adapter]
-        else:
-            # conv2d 3x3
-            output_tensor = (
-                F.conv2d(
-                    weight_A.permute(1, 0, 2, 3),
-                    weight_B,
-                ).permute(1, 0, 2, 3)
-                * self.scaling[adapter]
-            )
-
-        if cast_to_fp32:
-            output_tensor = output_tensor.to(dtype=dtype)
-
-            # cast back the weights
-            self.lora_A[adapter].weight.data = weight_A.to(dtype)
-            self.lora_B[adapter].weight.data = weight_B.to(dtype)
-
-        return output_tensor
-
-    def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
-        previous_dtype = x.dtype
-
-        if self.disable_adapters:
-            if self.merged:
-                self.unmerge()
-            result = self.base_layer(x, *args, **kwargs)
-        elif self.merged:
-            result = self.base_layer(x, *args, **kwargs)
-        else:
-            result = self.base_layer(x, *args, **kwargs)
-            for active_adapter in self.active_adapters:
-                if active_adapter not in self.lora_A.keys():
-                    continue
-                lora_A = self.lora_A[active_adapter]
-                lora_B = self.lora_B[active_adapter]
-                dropout = self.lora_dropout[active_adapter]
-                scaling = self.scaling[active_adapter]
-                x = x.to(lora_A.weight.dtype)
-                result += lora_B(lora_A(dropout(x))) * scaling
-
-        result = result.to(previous_dtype)
-        return result
-
-    def __repr__(self) -> str:
-        rep = super().__repr__()
-        return "lora." + rep
-
+            out = self.forward_with_fp_weight(input)
+            return out
 
 def dispatch_default(
     target: torch.nn.Module,
     adapter_name: str,
-    lora_config: LoraConfig,
+    sasut_config: SASUTConfig,
     **kwargs,
 ) -> Optional[torch.nn.Module]:
     new_module = None
@@ -822,39 +703,40 @@ def dispatch_default(
     else:
         target_base_layer = target
 
-    if isinstance(target_base_layer, torch.nn.Embedding):
-        embedding_kwargs = kwargs.copy()
-        embedding_kwargs.pop("fan_in_fan_out", None)
-        embedding_kwargs.update(lora_config.loftq_config)
-        new_module = Embedding(target, adapter_name, **embedding_kwargs)
-    elif isinstance(target_base_layer, torch.nn.Conv2d):
-        kwargs.update(lora_config.loftq_config)
-        new_module = Conv2d(target, adapter_name, **kwargs)
-    elif isinstance(target_base_layer, torch.nn.Linear):
+    # if isinstance(target_base_layer, torch.nn.Embedding):
+    #     embedding_kwargs = kwargs.copy()
+    #     embedding_kwargs.pop("fan_in_fan_out", None)
+    #     embedding_kwargs.update(lora_config.loftq_config)
+    #     new_module = Embedding(target, adapter_name, **embedding_kwargs)
+    # elif isinstance(target_base_layer, torch.nn.Conv2d):
+    #     kwargs.update(lora_config.loftq_config)
+    #     new_module = Conv2d(target, adapter_name, **kwargs)
+    if isinstance(target_base_layer, torch.nn.Linear):
         if kwargs["fan_in_fan_out"]:
+            raise NotImplementedError('no fan in fan out')
             warnings.warn(
                 "fan_in_fan_out is set to True but the target module is `torch.nn.Linear`. "
                 "Setting fan_in_fan_out to False."
             )
             kwargs["fan_in_fan_out"] = lora_config.fan_in_fan_out = False
-        kwargs.update(lora_config.loftq_config)
-        new_module = Linear(target, adapter_name, **kwargs)
-    elif isinstance(target_base_layer, QuantizedLinear):
-        if kwargs["fan_in_fan_out"]:
-            warnings.warn(
-                "fan_in_fan_out is set to True but the target module is `torch.nn.Linear`. "
-                "Setting fan_in_fan_out to False."
-            )
-            kwargs["fan_in_fan_out"] = lora_config.fan_in_fan_out = False
-        kwargs.update(lora_config.loftq_config)
-        new_module = Linear(target, adapter_name, **kwargs)
-    elif isinstance(target_base_layer, Conv1D):
-        if not kwargs["fan_in_fan_out"]:
-            warnings.warn(
-                "fan_in_fan_out is set to False but the target module is `Conv1D`. " "Setting fan_in_fan_out to True."
-            )
-            kwargs["fan_in_fan_out"] = lora_config.fan_in_fan_out = True
-        kwargs.update(lora_config.loftq_config)
-        new_module = Linear(target, adapter_name, is_target_conv_1d_layer=True, **kwargs)
+       # kwargs.update(lora_config.loftq_config)
+        new_module = QuantizedLinear(target, adapter_name, sasut_config)
+    # elif isinstance(target_base_layer, QuantizedLinear):
+    #     if kwargs["fan_in_fan_out"]:
+    #         warnings.warn(
+    #             "fan_in_fan_out is set to True but the target module is `torch.nn.Linear`. "
+    #             "Setting fan_in_fan_out to False."
+    #         )
+    #         kwargs["fan_in_fan_out"] = lora_config.fan_in_fan_out = False
+    #     kwargs.update(lora_config.loftq_config)
+    #     new_module = Linear(target, adapter_name, **kwargs)
+    # elif isinstance(target_base_layer, Conv1D):
+    #     if not kwargs["fan_in_fan_out"]:
+    #         warnings.warn(
+    #             "fan_in_fan_out is set to False but the target module is `Conv1D`. " "Setting fan_in_fan_out to True."
+    #         )
+    #         kwargs["fan_in_fan_out"] = lora_config.fan_in_fan_out = True
+    #     kwargs.update(lora_config.loftq_config)
+    #     new_module = Linear(target, adapter_name, is_target_conv_1d_layer=True, **kwargs)
 
     return new_module
