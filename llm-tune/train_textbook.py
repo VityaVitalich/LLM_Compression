@@ -247,7 +247,7 @@ def tokenize_datasets(
     else:
         column_names = list(raw_datasets.features)
 
-    text_column_name = "text" if "text" in column_names else column_names[0]
+    text_column_name = "textbook" if "textbook" in column_names else column_names[0]
 
     def tokenize_function(examples):
         output = tokenizer(examples[text_column_name])
