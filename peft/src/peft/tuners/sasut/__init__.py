@@ -16,11 +16,11 @@
 from peft.import_utils import is_bnb_4bit_available, is_bnb_available
 
 from .config import SASUTConfig
-from .layer import Embedding, Linear, SASUTLayer
+from .layer import SASUTLayer
 from .model import SASUTModel
 
 
-__all__ = ["SASUTConfig", "Embedding", "SASUTLayer", "Linear", "SASUTModel"]
+__all__ = ["SASUTConfig", "SASUTLayer", "SASUTModel"]
 
 
 def __getattr__(name):

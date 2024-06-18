@@ -59,7 +59,7 @@ class SASUTConfig(PeftConfig):
                 "Whether to compute quant scale"
             )
         })
-    layer_bits: Optional[Union[Dict[str, int], 4]] = field(default=4, metadata={"help": "Layer bits"})
+    layer_bits: int = field(default=4, metadata={"help": "Layer bits"})
     fan_in_fan_out: bool = field(
         default=False,
         metadata={"help": "Set this to True if the layer to replace stores weight like (fan_in, fan_out)"},

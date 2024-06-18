@@ -39,9 +39,9 @@ from peft.utils import (
 )
 
 from .config import SASUTConfig
-from .gptq import dispatch_gptq
-from .layer import Conv2d, SASUTLayer, dispatch_default
-from .tp_layer import dispatch_megatron
+#from .gptq import dispatch_gptq
+from .layer import SASUTLayer, dispatch_default
+#from .tp_layer import dispatch_megatron
 
 
 class SASUTModel(BaseTuner):
@@ -103,10 +103,17 @@ class SASUTModel(BaseTuner):
         - **peft_config** ([`LoraConfig`]): The configuration of the Lora model.
     """
 
-    prefix: str = "lora_"
+    prefix: str = "sasut_"
 
     def __init__(self, model, config, adapter_name) -> None:
+        self.outlier_ids = get_fp_inds_for_quik(
+            config.path_to_act_scales, 
+            config.outlier_num
+        )
+
         super().__init__(model, config, adapter_name)
+
+        
 
     def _check_new_adapter_config(self, config: LoraConfig) -> None:
         """
@@ -139,6 +146,7 @@ class SASUTModel(BaseTuner):
         if current_key is None:
             raise ValueError("Current Key shouldn't be `None`")
 
+        
         # Regexp matching - Find key which matches current target_name in patterns provided
         #pattern_keys = list(chain(lora_config.rank_pattern.keys(), lora_config.alpha_pattern.keys()))
         #target_name_key = next(filter(lambda key: re.match(f".*\.{key}$", current_key), pattern_keys), current_key)
@@ -178,8 +186,14 @@ class SASUTModel(BaseTuner):
         #         lora_config.init_lora_weights,
         #         lora_config.use_rslora,
         #     )
-        #else:
-        new_module = self._create_new_module(lora_config, adapter_name, target)#, **kwargs)
+
+        try:
+            current_outlier_ids = self.outlier_ids[current_key]
+            #print('success, ', current_key)
+        except KeyError:
+            current_outlier_ids = []
+            #print('not success, ', current_key)
+        new_module = self._create_new_module(lora_config, adapter_name, target, outlier_ids=current_outlier_ids)#, **kwargs)
         if adapter_name != self.active_adapter:
             raise NotImplementedError('Can not add second adapter for now')
             # adding an additional adapter: it is not automatically trainable
@@ -222,24 +236,30 @@ class SASUTModel(BaseTuner):
     def _mark_only_adapters_as_trainable(self, model: nn.Module) -> None:
         for n, p in model.named_parameters():
             if self.prefix not in n:
-                # TODO: Make learnable only outliers
+                # Do not train embeddings, LM Head, normalizations, etc
                 p.requires_grad = False
-
-        for active_adapter in self.active_adapters:
-            bias = self.peft_config[active_adapter].bias
-            if bias == "none":
-                continue
-
-            if bias == "all":
-                for n, p in model.named_parameters():
-                    if "bias" in n:
-                        p.requires_grad = True
-            elif bias == "lora_only":
-                for m in model.modules():
-                    if isinstance(m, LoraLayer) and hasattr(m, "bias") and m.bias is not None:
-                        m.bias.requires_grad = True
             else:
-                raise NotImplementedError(f"Requested bias: {bias}, is not implemented.")
+                # do not update non-salient params
+                if 'q_weight' in n:
+                    p.requires_grad = False
+                elif ('fp_weight' in n) or ('bias' in n):
+                    p.requires_grad = True
+        # No bias in our model
+        # for active_adapter in self.active_adapters:
+        #     bias = self.peft_config[active_adapter].bias
+        #     if bias == "none":
+        #         continue
+
+        #     if bias == "all":
+        #         for n, p in model.named_parameters():
+        #             if "bias" in n:
+        #                 p.requires_grad = True
+        #     elif bias == "lora_only":
+        #         for m in model.modules():
+        #             if isinstance(m, LoraLayer) and hasattr(m, "bias") and m.bias is not None:
+        #                 m.bias.requires_grad = True
+        #     else:
+        #         raise NotImplementedError(f"Requested bias: {bias}, is not implemented.")
 
     @staticmethod
     def _create_new_module(lora_config, adapter_name, target, **kwargs):
@@ -642,3 +662,32 @@ class SASUTModel(BaseTuner):
         model.
         """
         return self._unload_and_optionally_merge(merge=False)
+
+
+def get_layer_number(s):
+    llama_pattern = r'model\.layers\.(\d+)\.(.+)'
+
+    # Perform regex search
+    match = re.search(llama_pattern, s)
+
+    layer_number = match.group(1)
+    return layer_number
+
+def get_last_two_modules(module_string):
+    # Split the string by dots
+    parts = module_string.split('.')
+    # Join the last two elements with a dot
+    if len(parts) >= 2:
+        last_two = '.'.join(parts[-2:])
+    else:
+        last_two = module_string  # In case there are less than 2 parts
+    return last_two
+
+def get_fp_inds_for_quik(path_to_act_scales, fp_features_num): 
+    act_scales = torch.load(path_to_act_scales)
+    if fp_features_num > 0:
+        fp_indices_in_lin_layers = {str(k): torch.sort(v)[1][-fp_features_num:] for k, v in act_scales.items()} 
+    else:
+        fp_indices_in_lin_layers = {str(k): torch.tensor([]) for k, v in act_scales.items()} 
+    
+    return fp_indices_in_lin_layers
