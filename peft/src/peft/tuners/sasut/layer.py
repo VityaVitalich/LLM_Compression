@@ -591,7 +591,7 @@ class BitNoiseQuant(nn.Module):
 
         return w
 
-class SASUTLayer(nn.Module):
+class SASUTLayer(BaseTunerLayer):
     def __init__(
         self,
         target,
@@ -601,44 +601,29 @@ class SASUTLayer(nn.Module):
     ):
         super(SASUTLayer, self).__init__()
 
+        self.base_layer = target
         self.in_features = target.in_features
         self.out_features = target.out_features
         self.outlier_cols_num = sasut_config.outlier_num
         self.dtype = target.weight.data.dtype
         self.outlier_ids = outlier_ids
+        self.merged_adapters = []
         assert len(self.outlier_ids) > 0, "List of outliers could not be empty"
 
-        if self.outlier_cols_num == 0:
-            raise ValueError('outlier col num is 0')
+        assert self.outlier_cols_num > 0, 'outlier col num is not positive'
 
-        elif self.outlier_cols_num > 0:
-            self.q_in_features = self.in_features - self.outlier_cols_num
-            self.fp_in_features = self.outlier_cols_num
-            
-            sasut_q_weight = torch.rand((self.out_features, self.q_in_features), 
-                                    dtype=self.dtype)
-            sasut_fp_weight = torch.rand((self.out_features, self.fp_in_features), 
-                                    dtype=self.dtype)
+        self.q_in_features = self.in_features - self.outlier_cols_num
+        self.fp_in_features = self.outlier_cols_num
+        
+        sasut_q_weight = torch.rand((self.out_features, self.q_in_features), 
+                                dtype=self.dtype)
+        sasut_fp_weight = torch.rand((self.out_features, self.fp_in_features), 
+                                dtype=self.dtype)
 
-            self.sasut_q_weight = nn.Parameter(sasut_q_weight)
-            self.sasut_fp_weight = nn.Parameter(sasut_fp_weight)
-            self.bias = None
+        self.sasut_q_weight = nn.Parameter(sasut_q_weight)
+        self.sasut_fp_weight = nn.Parameter(sasut_fp_weight)
 
-            mask = torch.ones(self.in_features, 
-                              dtype=torch.bool)
-            col_perm = torch.arange(self.in_features, 
-                                    dtype=torch.int32)
-            inv_col_perm = torch.zeros(col_perm.numel(), 
-                                       dtype=col_perm.dtype)           
-
-            self.register_buffer("mask", mask)
-            self.register_buffer("col_perm", col_perm)
-            self.register_buffer("inv_col_perm", inv_col_perm)
-
-        else:
-            raise ValueError('Number of outlier columns should be non-negative!')
-
-        self.from_fp_Linear(target, outlier_ids)
+        self.from_fp_Linear(self.base_layer, outlier_ids)
         self.add_quant_bitnoise_to_weight(
             bit=sasut_config.layer_bits,
             noise_type=sasut_config.noise_type,
@@ -697,6 +682,71 @@ class SASUTLayer(nn.Module):
         if compute_quant_scale:
             self.noisemaker.compute_alpha_scale(w)
 
+
+class Linear(nn.Module, SASUTLayer):
+    def __init__(
+        self,
+        base_layer,
+        adapter_name,
+        sasut_config,
+        outlier_ids,
+        **kwargs,
+    ) -> None:
+        super().__init__()
+        SASUTLayer.__init__(self, base_layer, adapter_name, sasut_config, outlier_ids)
+
+        self._active_adapter = adapter_name
+
+        self._buffers["mask"] = self.mask
+        self._buffers["col_perm"] = self.col_perm
+        self._buffers["inv_col_perm"] = self.inv_col_perm
+    
+    def merge(self, safe_merge: bool = False, adapter_names: Optional[List[str]] = None) -> None:
+        """
+        Merge the active adapter weights into the base weights
+
+        Args:
+            safe_merge (`bool`, *optional*):
+                If True, the merge operation will be performed in a copy of the original weights and check for NaNs
+                before merging the weights. This is useful if you want to check if the merge operation will produce
+                NaNs. Defaults to `False`.
+            adapter_names (`List[str]`, *optional*):
+                The list of adapter names that should be merged. If None, all active adapters will be merged. Defaults
+                to `None`.
+        """
+        if self.merged:
+            warnings.warn(
+                f"Already following adapters were merged {','.join(self.merged_adapters)}. "
+                f"You are now additionally merging {','.join(self.active_adapters)}."
+            )
+
+        if adapter_names is None:
+            adapter_names = self.active_adapters
+
+        for active_adapter in adapter_names:
+            base_layer = self.get_base_layer()
+            if safe_merge:
+                # Note that safe_merge will be slower than the normal merge
+                # because of the copy operation.
+                orig_weights = base_layer.weight.data.clone()
+                orig_weights[:, ~self.mask] = self.sasut_fp_weight.data
+
+                if not torch.isfinite(orig_weights).all():
+                    raise ValueError(
+                        f"NaNs detected in the merged weights. The adapter {active_adapter} seems to be broken"
+                    )
+
+                base_layer.weight.data = orig_weights
+            else:
+                base_layer.weight.data[:, ~self.mask] += self.sasut_fp_weight
+            self.merged_adapters.append(active_adapter)
+
+    def unmerge(self) -> None:
+        """
+        This method unmerges all merged adapter layers from the base weights.
+        """
+        raise NotImplementedError('Method does not support unmerging')
+
     def forward(self, input):
         
         if self.training:
@@ -704,13 +754,12 @@ class SASUTLayer(nn.Module):
             out_w = torch.hstack([quant_w_noised, 
                                     self.sasut_fp_weight])               
         else:
-            out_w = torch.hstack([self.q_weight, 
+            out_w = torch.hstack([self.sasut_q_weight, 
                                     self.sasut_fp_weight])
 
         out_w = out_w[:, self.inv_col_perm]
 
         return F.linear(input, out_w, self.bias)   
-
 
 def dispatch_default(
     target: torch.nn.Module,
@@ -735,7 +784,7 @@ def dispatch_default(
         #     )
         #     kwargs["fan_in_fan_out"] = lora_config.fan_in_fan_out = False
        # kwargs.update(lora_config.loftq_config)
-        new_module = SASUTLayer(target, adapter_name, sasut_config, outlier_ids=outlier_ids)
+        new_module = Linear(target, adapter_name, sasut_config, outlier_ids=outlier_ids)
 
 
     return new_module
