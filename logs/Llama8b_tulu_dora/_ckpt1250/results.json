@@ -1,0 +1,297 @@
+{
+  "results": {
+    "ai2_arc": {
+      "acc,none": 0.7271702367531003,
+      "acc_stderr,none": 0.04371616385920332,
+      "acc_norm,none": 0.7263246899661782,
+      "acc_norm_stderr,none": 0.03686740787910543,
+      "alias": "ai2_arc"
+    },
+    "arc_challenge": {
+      "acc,none": 0.5443686006825939,
+      "acc_stderr,none": 0.01455374993930686,
+      "acc_norm,none": 0.5742320819112628,
+      "acc_norm_stderr,none": 0.014449464278868807,
+      "alias": " - arc_challenge"
+    },
+    "arc_easy": {
+      "acc,none": 0.8173400673400674,
+      "acc_stderr,none": 0.007928503719209121,
+      "acc_norm,none": 0.8013468013468014,
+      "acc_norm_stderr,none": 0.00818702710179308,
+      "alias": " - arc_easy"
+    },
+    "boolq": {
+      "acc,none": 0.8370030581039756,
+      "acc_stderr,none": 0.006460197424088751,
+      "alias": "boolq"
+    },
+    "hellaswag": {
+      "acc,none": 0.6128261302529376,
+      "acc_stderr,none": 0.004861084534086999,
+      "acc_norm,none": 0.7956582354112727,
+      "acc_norm_stderr,none": 0.004023957334462121,
+      "alias": "hellaswag"
+    },
+    "piqa": {
+      "acc,none": 0.8046789989118607,
+      "acc_stderr,none": 0.009249776222397577,
+      "acc_norm,none": 0.8155603917301415,
+      "acc_norm_stderr,none": 0.00904899983559281,
+      "alias": "piqa"
+    },
+    "winogrande": {
+      "acc,none": 0.7545382794001578,
+      "acc_stderr,none": 0.012095272937183644,
+      "alias": "winogrande"
+    }
+  },
+  "groups": {
+    "ai2_arc": {
+      "acc,none": 0.7271702367531003,
+      "acc_stderr,none": 0.04371616385920332,
+      "acc_norm,none": 0.7263246899661782,
+      "acc_norm_stderr,none": 0.03686740787910543,
+      "alias": "ai2_arc"
+    }
+  },
+  "configs": {
+    "arc_challenge": {
+      "task": "arc_challenge",
+      "group": [
+        "ai2_arc"
+      ],
+      "dataset_path": "ai2_arc",
+      "dataset_name": "ARC-Challenge",
+      "training_split": "train",
+      "validation_split": "validation",
+      "test_split": "test",
+      "doc_to_text": "Question: {{question}}\nAnswer:",
+      "doc_to_target": "{{choices.label.index(answerKey)}}",
+      "doc_to_choice": "{{choices.text}}",
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "metric_list": [
+        {
+          "metric": "acc",
+          "aggregation": "mean",
+          "higher_is_better": true
+        },
+        {
+          "metric": "acc_norm",
+          "aggregation": "mean",
+          "higher_is_better": true
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": true,
+      "doc_to_decontamination_query": "Question: {{question}}\nAnswer:",
+      "metadata": [
+        {
+          "version": 1.0
+        }
+      ]
+    },
+    "arc_easy": {
+      "task": "arc_easy",
+      "group": [
+        "ai2_arc"
+      ],
+      "dataset_path": "ai2_arc",
+      "dataset_name": "ARC-Easy",
+      "training_split": "train",
+      "validation_split": "validation",
+      "test_split": "test",
+      "doc_to_text": "Question: {{question}}\nAnswer:",
+      "doc_to_target": "{{choices.label.index(answerKey)}}",
+      "doc_to_choice": "{{choices.text}}",
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "metric_list": [
+        {
+          "metric": "acc",
+          "aggregation": "mean",
+          "higher_is_better": true
+        },
+        {
+          "metric": "acc_norm",
+          "aggregation": "mean",
+          "higher_is_better": true
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": true,
+      "doc_to_decontamination_query": "Question: {{question}}\nAnswer:",
+      "metadata": [
+        {
+          "version": 1.0
+        }
+      ]
+    },
+    "boolq": {
+      "task": "boolq",
+      "group": [
+        "super-glue-lm-eval-v1"
+      ],
+      "dataset_path": "super_glue",
+      "dataset_name": "boolq",
+      "training_split": "train",
+      "validation_split": "validation",
+      "doc_to_text": "{{passage}}\nQuestion: {{question}}?\nAnswer:",
+      "doc_to_target": "label",
+      "doc_to_choice": [
+        "no",
+        "yes"
+      ],
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "metric_list": [
+        {
+          "metric": "acc"
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": true,
+      "doc_to_decontamination_query": "passage",
+      "metadata": [
+        {
+          "version": 2.0
+        }
+      ]
+    },
+    "hellaswag": {
+      "task": "hellaswag",
+      "group": [
+        "multiple_choice"
+      ],
+      "dataset_path": "hellaswag",
+      "training_split": "train",
+      "validation_split": "validation",
+      "process_docs": "<function process_docs at 0x155482a97760>",
+      "doc_to_text": "{{query}}",
+      "doc_to_target": "{{label}}",
+      "doc_to_choice": "choices",
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "metric_list": [
+        {
+          "metric": "acc",
+          "aggregation": "mean",
+          "higher_is_better": true
+        },
+        {
+          "metric": "acc_norm",
+          "aggregation": "mean",
+          "higher_is_better": true
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": false,
+      "metadata": [
+        {
+          "version": 1.0
+        }
+      ]
+    },
+    "piqa": {
+      "task": "piqa",
+      "dataset_path": "piqa",
+      "training_split": "train",
+      "validation_split": "validation",
+      "doc_to_text": "Question: {{goal}}\nAnswer:",
+      "doc_to_target": "label",
+      "doc_to_choice": "{{[sol1, sol2]}}",
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "metric_list": [
+        {
+          "metric": "acc",
+          "aggregation": "mean",
+          "higher_is_better": true
+        },
+        {
+          "metric": "acc_norm",
+          "aggregation": "mean",
+          "higher_is_better": true
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": true,
+      "doc_to_decontamination_query": "goal",
+      "metadata": [
+        {
+          "version": 1.0
+        }
+      ]
+    },
+    "winogrande": {
+      "task": "winogrande",
+      "dataset_path": "winogrande",
+      "dataset_name": "winogrande_xl",
+      "training_split": "train",
+      "validation_split": "validation",
+      "doc_to_text": "<function doc_to_text at 0x15548289d630>",
+      "doc_to_target": "<function doc_to_target at 0x15548289dbd0>",
+      "doc_to_choice": "<function doc_to_choice at 0x15548289df30>",
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "metric_list": [
+        {
+          "metric": "acc",
+          "aggregation": "mean",
+          "higher_is_better": true
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": true,
+      "doc_to_decontamination_query": "sentence",
+      "metadata": [
+        {
+          "version": 1.0
+        }
+      ]
+    }
+  },
+  "versions": {
+    "ai2_arc": "N/A",
+    "arc_challenge": "Yaml",
+    "arc_easy": "Yaml",
+    "boolq": "Yaml",
+    "hellaswag": "Yaml",
+    "piqa": "Yaml",
+    "winogrande": "Yaml"
+  },
+  "n-shot": {
+    "ai2_arc": 0,
+    "arc_challenge": 0,
+    "arc_easy": 0,
+    "boolq": 0,
+    "hellaswag": 0,
+    "piqa": 0,
+    "winogrande": 0
+  },
+  "config": {
+    "model": "hf",
+    "model_args": "pretrained=/home/LLM_Compression/ckpts/full/Llama8b_tulu_dora/checkpoint-1250,parallelize=True",
+    "batch_size": "16",
+    "batch_sizes": [],
+    "device": null,
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": {}
+  },
+  "git_hash": "b586257"
+}

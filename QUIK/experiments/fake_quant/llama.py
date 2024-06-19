@@ -10,7 +10,13 @@ import torch
 import quik_utils
 import quant
 import sparseGPT_utils
+import types
+import torch.nn.functional as F
 DEV = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+funcType = types.MethodType
+
+def unquantized_forward(self, input: torch.Tensor) -> torch.Tensor:
+    return F.linear(input, self.weight, self.bias)
 
 def llama_parser():
     parser = argparse.ArgumentParser()
@@ -212,8 +218,17 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 if 'down_proj' in name:
                     if args.int8_down_proj:
                         current_w_bits = 8
+
+                if getattr(subset[name], 'quantizer', False):
+                    ste_scales = None
+                   # ste_scales = subset[name].quantizer.s.detach()
+                    # replace with regular forward to not perform quantization on forward
+                   # subset[name].forward = funcType(unquantized_forward, subset[name])
+                else:
+                    ste_scales = None
+                
                 modules_quik[name].quantizer.configure(
-                    current_w_bits, perchannel=True, sym=not(args.w_asym), mse=args.w_clip
+                    current_w_bits, perchannel=True, sym=not(args.w_asym), mse=args.w_clip, scales=ste_scales
                 )
 
             def add_batch(name):
@@ -225,6 +240,7 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 handles.append(subset[name].register_forward_hook(add_batch(name)))
             for j in range(args.nsamples):
                 outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
+            #    print('after cur layer', outs[j].isnan().sum())
             for h in handles:
                 h.remove()
 
@@ -242,26 +258,27 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 quantizers['model.layers.%d.%s' % (i, name)] = modules_quik[name].quantizer
                 save_dict['model.layers.%d.%s' % (i, name)] = {}
                 # save_dict['model.layers.%d.%s' % (i, name)]['dequant_weight'] = modules_quik[name].layer.weight.data.to("cpu")
-                save_dict['model.layers.%d.%s' % (i, name)]['quant_weight'] = modules_quik[name].quant_weight.to("cpu")
+            #    save_dict['model.layers.%d.%s' % (i, name)]['quant_weight'] = modules_quik[name].quant_weight.to("cpu")
                 
-                if modules_quik[name].fp_features > 0:
-                    save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = modules_quik[name].fp_indices
-                    save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = \
-                            modules_quik[name].layer.weight.data[:, modules_quik[name].fp_indices].to("cpu")
-                else:
-                    save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = None
-                    save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = None
+                # if modules_quik[name].fp_features > 0:
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = modules_quik[name].fp_indices
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = \
+                #             modules_quik[name].layer.weight.data[:, modules_quik[name].fp_indices].to("cpu")
+                # else:
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_indices'] = None
+                #     save_dict['model.layers.%d.%s' % (i, name)]['fp_weight'] = None
 
                 save_dict['model.layers.%d.%s' % (i, name)]['alpha'] = modules_quik[name].quantizer.alpha.to("cpu")
-                save_dict['model.layers.%d.%s' % (i, name)]['alpha_pq'] = modules_quik[name].quantizer.alpha_pq.to("cpu")
-                save_dict['model.layers.%d.%s' % (i, name)]['bit'] = torch.tensor(modules_quik[name].quantizer.bits).to("cpu")
-                save_dict['model.layers.%d.%s' % (i, name)]['maxq'] = modules_quik[name].quantizer.maxq.to("cpu")
+                # save_dict['model.layers.%d.%s' % (i, name)]['alpha_pq'] = modules_quik[name].quantizer.alpha_pq.to("cpu")
+               # save_dict['model.layers.%d.%s' % (i, name)]['bit'] = torch.tensor(modules_quik[name].quantizer.bits)
+               # save_dict['model.layers.%d.%s' % (i, name)]['sym'] = torch.tensor(modules_quik[name].quantizer.sym)
                 
                 modules_quik[name].free()
 
         for j in range(args.nsamples):
             outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
-
+           # outs[j] = torch.clip(outs[j], min=torch.finfo(torch.bfloat16).min, max=torch.finfo(torch.bfloat16).max)
+           # print('after outs', (~outs[j].isfinite()).sum(), outs[j].isnan().sum())
         layers[i] = layer.cpu()
         del layer
         del modules_quik 
@@ -359,7 +376,6 @@ if __name__ == '__main__':
         )
         quantizers, save_dict = llama_sequential(model, dataloader, act_scales, DEV, args)
     
-    
     # Add Input Quantization
     if args.a_bits < 16:
         number_of_zero_outlier_linear = 0
@@ -403,12 +419,9 @@ if __name__ == '__main__':
             wandb.log({'zero_outlier_linear': number_of_zero_outlier_linear})
         print(f'{number_of_zero_outlier_linear} layers with zero outliers.\n')
 
-    # save_path = f"/home/projects/LLM_comression/QUIK/weights/llama7b_{args.w_bits}w_{args.a_bits}a_{args.fp_features}_quant_from_finetune_outliers_orig"
     save_path = args.path_to_save_quant_model
-    # torch.save(model, save_path)
     model.save_pretrained(save_path)
-    torch.save(save_dict, f"{save_path}/quant_params.pt")
-
+    torch.save(save_dict, f"{save_path}/quantazed_model.pt")
     datasets = ['wikitext2']
     for dataset in datasets:
         dataloader, testloader = datautils.get_loaders(

@@ -20,7 +20,7 @@
 """ PyTorch LLaMA model."""
 import math
 import warnings
-from typing import List, Optional, Tuple, Union, Literal
+from typing import List, Optional, Tuple, Union
 from operator import attrgetter
 
 import torch
@@ -37,7 +37,11 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
     _prepare_4d_causal_attention_mask_for_sdpa,
 )
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
 from ...utils import (
@@ -75,7 +79,9 @@ def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    cu_seqlens = F.pad(
+        torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0)
+    )
     return (
         indices,
         cu_seqlens,
@@ -91,14 +97,21 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
+    input_ids_shape: torch.Size,
+    dtype: torch.dtype,
+    device: torch.device,
+    past_key_values_length: int = 0,
 ):
     warnings.warn(
         "Calling `transformers.models.llama.modeling_llama._make_causal_mask` is deprecated and will be removed in v4.37. Use `transformers.models.llama.modeling_llama.AttentionMaskConverter._make_causal_mask"
     )
     return AttentionMaskConverter._make_causal_mask(
-        input_ids_shape=input_ids_shape, dtype=dtype, device=device, past_key_values_length=past_key_values_length
+        input_ids_shape=input_ids_shape,
+        dtype=dtype,
+        device=device,
+        past_key_values_length=past_key_values_length,
     )
+
 
 def clipped_softmax(data, dim=-1, eta=1.1, gamma=-0.1, **kw):
     sm_out = torch.nn.functional.softmax(data, dim=dim, **kw)
@@ -107,7 +120,18 @@ def clipped_softmax(data, dim=-1, eta=1.1, gamma=-0.1, **kw):
     stretched_out = sm_out * (eta - gamma) + gamma
     return torch.clip(stretched_out, 0, 1)
 
-def scaled_dot_product_attention(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, eta=1, gamma=0) -> torch.Tensor:
+
+def scaled_dot_product_attention(
+    query,
+    key,
+    value,
+    attn_mask=None,
+    dropout_p=0.0,
+    is_causal=False,
+    scale=None,
+    eta=1,
+    gamma=0,
+) -> torch.Tensor:
     # Efficient implementation equivalent to the following:
     L, S = query.size(-2), key.size(-2)
     scale_factor = 1 / math.sqrt(query.size(-1)) if scale is None else scale
@@ -126,591 +150,207 @@ def scaled_dot_product_attention(query, key, value, attn_mask=None, dropout_p=0.
     attn_weight = query @ key.transpose(-2, -1) * scale_factor
     attn_weight += attn_bias
     attn_weight = clipped_softmax(attn_weight, dim=-1, eta=eta, gamma=gamma)
-    #attn_weight = torch.softmax(attn_weight, dim=-1)
+    # attn_weight = torch.softmax(attn_weight, dim=-1)
     attn_weight = torch.dropout(attn_weight, dropout_p, train=True)
     return attn_weight @ value
 
-class SymQuant(nn.Module):
-    def __init__(
-        self,
-        out_features,
-        bit
-    )-> None:
 
-        super(SymQuant, self).__init__()
+def round_pass(x):
+    y = x.round()
+    y_grad = x
+    return (y - y_grad).detach() + y_grad
+   # return x
+
+
+def grad_scale(x, scale):
+    y = x
+    y_grad = x * scale
+    return (y - y_grad).detach() + y_grad
+
+
+def quantize(
+    X: torch.Tensor = None,
+    B: int = 16,
+) -> torch.Tensor:
+    thd_neg = -(2 ** (B - 1)) + 1
+    thd_pos = 2 ** (B - 1) - 1
+
+    scale = (X.max() - X.min()) / (thd_neg - thd_pos)
+    X = round_pass(X / scale)
+    X = torch.clip(X, thd_neg, thd_pos)
+    return scale * X
+
+
+@torch.jit.script
+def quantize_over_blocks(
+    X: torch.Tensor,
+    B: int = 16,
+    block_size: int = 4,  # Assuming block size along the first dimension
+) -> torch.Tensor:
+    # Dimensions for the input tensor
+    D = X.shape[1]
+
+    # Quantization thresholds
+    thd_neg = -(2 ** (B - 1)) + 1
+    thd_pos = 2 ** (B - 1) - 1
+    # Initialize an output tensor
+    X_quantized = torch.zeros_like(X)
+
+    # Calculate number of blocks
+    num_blocks = (
+        D + block_size - 1
+    ) // block_size  # Account for the last block that might be smaller
+
+    for i in range(num_blocks):
+        # Extract the block
+        start_idx = i * block_size
+        end_idx = min((i + 1) * block_size, D)
+        block = X[:, start_idx:end_idx]
+
+        # Scale for the current block
+        scale = (block.max() - block.min()) / (thd_pos - thd_neg)
+        block = round_pass(block / scale)
+        block = torch.clip(block, thd_neg, thd_pos)
+
+        # Store the quantized block back into the tensor
+        X_quantized[:, start_idx:end_idx] = scale * block
+
+    return X_quantized
+
+
+def quantize_with_outliers(
+    X: torch.Tensor,
+    B: int = 16,
+    block_size: int = 4,
+    idx: torch.Tensor = torch.tensor([]),
+):
+    if len(idx) == 0:
+        print("Empty outlier idx")
+        return quantize_over_blocks(X, B=B, block_size=block_size)
+
+    mask = torch.ones(X.size(1), dtype=torch.bool)
+    mask[idx] = False
+
+    # Split the tensor into quantize and no_quantize parts
+    X_quantize = X[:, mask]
+    X_no_quantize = X[:, ~mask]
+
+    # Quantize the part that needs quantization
+    X_quantized = quantize_over_blocks(X_quantize, B=B, block_size=block_size)
+
+    # # Prepare a tensor to hold the result
+    # X_result = torch.empty_like(X)
+
+    # Place the quantized and unquantized parts back in their original positions
+    X[:, mask] = X_quantized
+    X[:, ~mask] = X_no_quantize
+
+    return X
+
+
+class LsqQuan(nn.Module):
+    def __init__(
+        self, bit, all_positive=False, symmetric=False, per_channel=True, outlier_ids=[]
+    ):
+        super(LsqQuan, self).__init__()
         self.bit = bit
-        alpha_scale = torch.ones((out_features, 1))
-        self.alpha_scale = nn.Parameter(alpha_scale)
+        self.outlier_ids = outlier_ids
 
-    def get_scale(self):
-        qmax = 2 ** (self.bit - 1) - 1
-        scale = self.alpha_scale / qmax
-        return scale
-    
-    def dequantize(self, int_out):
-        scale = self.get_scale()
-        dq_out = scale * int_out
-        return dq_out
-
-    def dequantize_quik(self, int_out):
-        scale = self.get_scale()
-        scale = scale.view(-1)
-        dq_out = scale * int_out
-        return dq_out
-
-    def forward(self, int_out):
-        dq_out = self.dequantize(int_out)
-        return dq_out
-
-# class NoiseQuant(nn.Module):
-#     def __init__(
-#         self,
-#         weight_shape,
-#         bit, 
-#         block_size,
-#         quant_cols_num,
-#         mask
-#     )-> None:
-#         super(NoiseQuant, self).__init__()
-#         self.weight_shape = weight_shape
-
-#         self.bit = bit
-#         self.block_size = block_size
-#         self.mask = mask
-
-#         # self.quant_scale = None
-
-#         # self.register_buffer('quant_scale', torch.ones(weight_shape[1]).unsqueeze(1))
-#         quant_scale = torch.ones((weight_shape[0], quant_cols_num))
-#         self.register_buffer('quant_scale', quant_scale)
-
-#     def compute_quant_scale(self, weight) -> None:
-#         assert self.weight_shape == weight.shape, 'Shape of input weight is incompatible!'
-
-#         w = weight.data.clone()
-#         bit = self.bit
-#         block_size = self.block_size
-        
-#         if self.mask is not None:
-#             w = w[:, self.mask]
-        
-#         quanted_features = w.shape[1]
-
-#         if (block_size == 0):
-#             scale = self._get_row_scale(w, bit)
-#             scale = scale.unsqueeze(1)
-#         else:
-#             scale = []
-#             for i in range(0, quanted_features, block_size):
-#                 w_block = w[:, i:(i + block_size)]
-#                 scale_block = self._get_row_scale(w_block, bit)
-#                 scale.append(scale_block)
-
-#             scale = torch.vstack(scale).T
-
-#         scale = scale.to(w.dtype)
-#         self.quant_scale = scale.contiguous()
-        
-
-#     def _get_row_scale(self, w, bit, maxshrink=0.8, grid=100, norm=2):
-#         qmax = 2 ** (bit - 1) - 1
-#         qmin = -(2 ** (bit - 1))
-#         tmp = torch.zeros(w.shape[0], device=w.device)
-#         best = torch.full([w.shape[0]], float('inf'), device=w.device)
-
-#         wmin = torch.minimum(w.min(1)[0], tmp)
-#         wmax = torch.maximum(w.max(1)[0], tmp)
-
-#         wmax = torch.maximum(torch.abs(wmin), wmax)
-#         tmp = wmin < 0
-#         if torch.any(tmp):
-#             wmin[tmp] = -wmax[tmp]
-
-#         tmp = (wmax == 0)
-#         wmax[tmp] = +1
-
-#         scale = wmax / qmax
-
-#         for i in range(int(maxshrink * grid)):
-#             p = 1 - i / grid 
-#             wmax1 = p * wmax
-
-#             scale1 = wmax1 / qmax
-
-#             #quantization
-#             q = torch.clamp(torch.round(w / scale1.unsqueeze(1)), qmin, qmax)
-#             #dequantization
-#             q = q * scale1.unsqueeze(1)
-
-#             q -= w
-#             q.abs_()
-#             q.pow_(norm)
-#             err = torch.sum(q, 1)
-#             tmp = err < best
-
-#             if torch.any(tmp):
-#                 best[tmp] = err[tmp]
-#                 scale[tmp] = scale1[tmp]
-
-#         return scale
-
-#     def quant_noise(self, weight):
-#         assert self.weight_shape == weight.shape, 'Shape of input weight is incompatible!'
-
-#         w = weight.data
-#         device = weight.device
-#         block_size = self.block_size
-#         in_features = self.weight_shape[1]
-#         scale = self.quant_scale
-#         mask = self.mask
-
-#         if scale.device != device:
-#             scale = scale.to(device)
-
-#         if mask is not None:
-#             w_rand = torch.randn_like(w[:, mask], requires_grad=False) / 2
-#         else:
-#             w_rand = torch.randn_like(w, requires_grad=False) / 2
-
-#         if block_size == 0:
-#             # scale = torch.repeat_interleave(scale, in_features, dim=1)
-#             w_rand = scale * w_rand
-#         elif block_size > 0:
-#             scale = torch.repeat_interleave(scale, block_size, dim=1)
-#             w_rand = scale * w_rand
-
-#         if mask is not None:
-#             w_rand_tmp = torch.zeros(w.shape, dtype=w.dtype, device=w.device)
-#             w_rand_tmp[:, mask] = w_rand
-#             w_rand = w_rand_tmp
-
-#         return w_rand
-
-#     def forward(self, weight):
-#         w_rand = self.quant_noise(weight)
-#         w = weight + w_rand
-        
-#         return w
-
-
-class BitNoiseQuant(nn.Module):
-    def __init__(
-        self,
-        out_features,
-        bit,
-        noise_type
-    )-> None:
-
-        super(BitNoiseQuant, self).__init__()
-        self.out_features = out_features
-
-        self.bit = torch.tensor(bit)
-        self.noise_type = noise_type
-        
-
-        alpha = torch.ones((out_features, 1))
-        self.alpha_scale = nn.Parameter(alpha)
-        # self.register_buffer('alpha', alpha)
-
-    def compute_alpha_scale(self, quant_weight) -> None:
-        w = quant_weight.data
-        device = quant_weight.device
-        alpha = self.alpha_scale
-        bit = self.bit
-
-        if alpha.device != device:
-            alpha = alpha.to(device)
-        if bit.device != device:
-            bit = bit.to(device)
-
-        out_features = w.shape[0]
-        
-        alpha = self._get_row_scale(w, bit)
-        alpha = alpha.to(w.dtype)
-        self.alpha_scale.data = alpha.reshape((out_features, 1))
-
-    def _get_row_scale(self, w, bit, maxshrink=0.8, grid=100, norm=2):
-        qmax = 2 ** (bit.detach() - 1) - 1
-        qmin = -(2 ** (bit.detach() - 1))
-        tmp = torch.zeros(w.shape[0], device=w.device)
-        best = torch.full([w.shape[0]], float('inf'), device=w.device)
-
-        wmin = torch.minimum(w.min(1)[0], tmp)
-        wmax = torch.maximum(w.max(1)[0], tmp)
-
-        wmax = torch.maximum(torch.abs(wmin), wmax)
-        tmp = wmin < 0
-        if torch.any(tmp):
-            wmin[tmp] = -wmax[tmp]
-
-        tmp = (wmax == 0)
-        wmax[tmp] = +1
-
-        alpha = wmax
-
-        for i in range(int(maxshrink * grid)):
-            p = 1 - i / grid 
-            wmax1 = p * wmax
-
-            delta1 = wmax1 / qmax
-
-            #quantization
-            q = torch.clamp(torch.round(w / delta1.unsqueeze(1)), qmin, qmax)
-            #dequantization
-            q = q * delta1.unsqueeze(1)
-
-            q -= w
-            q.abs_()
-            q.pow_(norm)
-            err = torch.sum(q, 1)
-            tmp = err < best
-
-            if torch.any(tmp):
-                best[tmp] = err[tmp]
-                alpha[tmp] = wmax1[tmp]
-
-        return alpha
-
-    def _lsq_forward(self, w, bit, alpha):
-        qmax = 2 ** (bit.detach() - 1) - 1
-        # q = F.hardtanh(w / alpha, -1.0, 1.0) * qmax
-        q = F.hardtanh(w / alpha, -1.0, 1.0)
-        mask_q_pos = (q > 0)
-        q = q * (2 ** (bit.detach() - 1)) - mask_q_pos * q
-        out = (q.round() + (q - q.detach())) * (alpha / qmax)
-        return out
-
-    def _compute_quant_noise(self, w, bit, alpha):
-        # bit = nn.Parameter(torch.zeros(1))
-        # alpha = nn.Parameter(torch.tensor(0.01))
-
-        # N_BIN = 256
-        # bit = 2 + torch.sigmoid(bit)*4
-        # bit = 1.5 + torch.sigmoid(bit)
-
-        # bit += (torch.rand_like(bit) - 0.5)
-        # bit = bit.round() + (bit - bit.detach())
-
-        # device = w.device
-        # dtype = w.dtype
-
-        # alpha = F.softplus(alpha, beta=10**(6), threshold=1) 
-        # lsq = self._lsq_forward(w, bit.round(), alpha)
-
-        # with torch.no_grad():                
-            # diff = (lsq - w) / delta #difference between dequantized and original weights after their scale
-            # sel = diff[torch.logical_not(torch.logical_or(c1, c2))] #take weights less than alpha
-            # hist = torch.histc(sel.float(), bins=N_BIN, min=-0.5, max=0.5)    
-            
-            # noise = torch.multinomial(hist, w.numel(), True) + torch.rand_like(w.view(-1))               
-            # noise = (noise / N_BIN - 0.5).view(w.shape)
-            # noise = noise.to(w.dtype)
-
-        delta = alpha / (2**(bit - 1) - 1)
-        if self.noise_type == 'normal':
-            noise = torch.randn_like(w, requires_grad=False) / 2
-        elif self.noise_type == 'uniform':
-            noise = torch.rand_like(w, requires_grad=False) - 0.5
-
-        w_rand = noise * delta
-
-        if self.alpha_scale.requires_grad:  
-            c1 = w >= alpha
-            c2 = w <= -alpha     
-            w_clipped = torch.where(c2, -alpha, w + w_rand)
-            w_out = torch.where(c1, alpha, w_clipped)
+        if all_positive:
+            assert not symmetric, "Positive quantization cannot be symmetric"
+            # unsigned activation is quantized to [0, 2^b-1]
+            self.thd_neg = 0
+            self.thd_pos = 2**bit - 1
         else:
-            w_out = w + w_rand
-        
-        return w_out
-
-    def quant_noise(self, quant_weight) -> torch.tensor:
-
-        w = quant_weight
-        device = quant_weight.device
-        alpha = self.alpha_scale
-        bit = self.bit
-
-        if alpha.device != device:
-            alpha = alpha.to(device)
-        if bit.device != device:
-            bit = bit.to(device)
-
-        w_out = self._compute_quant_noise(w, bit, alpha)
-
-        return w_out
-
-    def quantize_weight(self, quant_weight):
-
-        w = quant_weight
-        device = quant_weight.device
-        alpha = self.alpha_scale
-        bit = self.bit
-
-
-        if alpha.device != device:
-            alpha = alpha.to(device)
-        if bit.device != device:
-            bit = bit.to(device)
-
-        lsq = self._lsq_forward(w, bit.round(), alpha)
-        q_out = lsq
-
-        return q_out
-
-    def forward(self, weight):
-        w = self.quant_noise(weight)
-
-        return w
-
-class QuantizedLinear(nn.Module):
-    def __init__(
-        self,
-        in_features: int,
-        out_features: int,
-        outlier_cols_num: int,
-        is_quant_weight: bool = False,
-        dtype: torch.dtype = torch.bfloat16
-    ):
-        super(QuantizedLinear, self).__init__()
-
-        self.in_features = in_features
-        self.out_features = out_features
-        self.q_in_features = None
-        self.fp_in_features = None
-        self.outlier_cols_num = outlier_cols_num
-        self.device = None
-        self.dtype = dtype
-        self.is_quant_weight = is_quant_weight
-        self.training_mode = None
-        self.quantizer = None
-        self.noisemaker = None
-        self.add_quant_bitnoise = None
-        self.add_quant_bitnoise_predict = None
-
-        if self.outlier_cols_num == 0:
-            weight = torch.rand((self.out_features, self.in_features), 
-                                dtype=self.dtype)
-            
-            self.weight = nn.Parameter(weight)
-            self.bias = None
-
-            self.mask = None
-            self.col_perm = None
-            self.inv_col_perm = None
-
-        elif self.outlier_cols_num > 0:
-            self.q_in_features = self.in_features - self.outlier_cols_num
-            self.fp_in_features = self.outlier_cols_num
-            
-            q_weight = torch.rand((self.out_features, self.q_in_features), 
-                                    dtype=self.dtype)
-            fp_weight = torch.rand((self.out_features, self.fp_in_features), 
-                                    dtype=self.dtype)
-
-            self.q_weight = nn.Parameter(q_weight)
-            self.fp_weight = nn.Parameter(fp_weight)
-            self.bias = None
-
-            mask = torch.ones(self.in_features, 
-                              dtype=torch.bool)
-            col_perm = torch.arange(self.in_features, 
-                                    dtype=torch.int32)
-            inv_col_perm = torch.zeros(col_perm.numel(), 
-                                       dtype=col_perm.dtype)           
-
-            self.register_buffer("mask", mask)
-            self.register_buffer("col_perm", col_perm)
-            self.register_buffer("inv_col_perm", inv_col_perm)
-
-        else:
-            raise ValueError('Number of outlier columns should be non-negative!')
-    
-
-    @torch.no_grad
-    def set_mask(self, outlier_ids: torch.tensor):
-        self.mask = torch.ones(self.in_features, 
-                               dtype=torch.bool)
-        self.mask[outlier_ids] = False
-
-        col_ids = torch.arange(self.in_features, 
-                               dtype=torch.int32)
-        self.col_perm = torch.cat([col_ids[self.mask], 
-                                   col_ids[~self.mask]])
-
-        self.inv_col_perm = torch.zeros(self.col_perm.numel(), 
-                                        dtype=self.col_perm.dtype)
-        self.inv_col_perm[self.col_perm] = torch.arange(self.col_perm.numel(),
-                                                        dtype=self.col_perm.dtype)       
-
-    def from_fp_Linear(
-        self,
-        linear: torch.nn.Linear,
-        outlier_ids: List = None,
-        training_mode: str = 'train_full'
-    ):
-        if self.outlier_cols_num == 0:            
-            self.weight.data = linear.weight.data
-            self.bias = nn.Parameter(linear.bias.data) if linear.bias is not None else None
-        
-        elif self.outlier_cols_num > 0:
-            if len(outlier_ids) > 0:
-                self.set_mask(outlier_ids)
-    
-            weight = linear.weight.data
-            self.q_weight.data = weight[:, self.mask]
-            self.fp_weight.data = weight[:, ~self.mask]
-
-            self.bias = nn.Parameter(linear.bias.data) if linear.bias is not None else None
-
-            self.set_training_mode(training_mode)
-    
-    def set_training_mode(
-        self, 
-        training_mode: Literal['train_full', 'train_outlier', 'train_quant']
-    ):
-        self.training_mode = training_mode
-
-        if self.training_mode == 'train_full':
-            self.q_weight.requires_grad = True 
-            self.fp_weight.requires_grad = True 
-
-        elif self.training_mode == 'train_outlier':
-            self.q_weight.requires_grad = False
-            self.fp_weight.requires_grad = True
-    
-        elif self.training_mode == 'train_quant':
-            self.q_weight.requires_grad = True
-            self.fp_weight.requires_grad = False
-
-    def add_symmetric_quantizer(
-        self,
-        bit: int,
-        learnable_scale: bool = False
-    ):
-                
-        self.quantizer = SymQuant(
-            out_features=self.out_features,
-            bit=bit    
-        )
-        if learnable_scale:
-            self.quantizer.alpha_scale.requires_grad = True
-        else:
-            self.quantizer.alpha_scale.requires_grad = False
-
-    def add_quant_weight(
-        self,
-        alpha_scale: torch.tensor,
-        quant_weight: torch.tensor,
-        fp_weight: torch.tensor = None
-    ):  
-        self.is_quant_weight = True
-
-        if fp_weight is not None:
-            assert self.mask is not None, \
-                'self.mask is None, try using set_mask method'
-
-            quant_weight = quant_weight.to(dtype=self.dtype, 
-                                           device=self.device)
-
-            quant_weight = quant_weight[:, self.mask]
-            self.q_weight.data = quant_weight
-            self.fp_weight.data = fp_weight.to(dtype=self.dtype, 
-                                               device=self.device)
-            
-        else:
-            self.weight = quant_weight.to(dtype=self.dtype, 
-                                          device=self.device)
-
-        self.quantizer.alpha_scale.data = alpha_scale.to(dtype=self.dtype, 
-                                                         device=self.device)
-
-    def add_quant_bitnoise_to_weight(
-        self, 
-        bit,
-        noise_type,
-        compute_quant_scale,
-        add_quant_noise_predict
-    ):
-        
-        self.add_quant_bitnoise = True
-        self.add_quant_bitnoise_predict = add_quant_noise_predict
-
-        if self.outlier_cols_num == 0:
-            w = self.weight
-        elif self.outlier_cols_num > 0:
-            w = self.q_weight
-
-        self.noisemaker = BitNoiseQuant(
-            out_features=w.shape[0],
-            bit=bit,
-            noise_type=noise_type
-        )
-
-        if compute_quant_scale:
-            if self.is_quant_weight:
-                w = self.quantizer.dequantize(w)
-            self.noisemaker.compute_alpha_scale(w)
-
-    def _noise_cond(self):
-        noise_cond1 = (self.add_quant_bitnoise and self.training)
-        noise_cond2 = (self.add_quant_bitnoise_predict and (not self.training))
-        noise_cond = noise_cond1 or noise_cond2
-
-        return noise_cond       
-
-    def forward_with_quant_weight(self, input):
-        noise_cond = self._noise_cond()
-        
-        if self.outlier_cols_num == 0:
-            dq_w = self.quantizer.dequantize(self.weight)
-            if noise_cond:
-               dq_w = self.noisemaker(dq_w) 
-
-            return F.linear(input, dq_w, self.bias)
-
-        elif self.outlier_cols_num > 0:
-            dq_w = self.quantizer.dequantize(self.q_weight)
-            if noise_cond:
-               dq_w = self.noisemaker(dq_w) 
-
-            out_w = torch.hstack([dq_w,
-                                  self.fp_weight])
-            out_w = out_w[:, self.inv_col_perm]
-
-            return F.linear(input, out_w, self.bias)
-
-    def forward_with_fp_weight(self, input):
-        noise_cond = self._noise_cond()
-
-        if self.outlier_cols_num == 0:
-            w = self.weight
-            if noise_cond:
-                w = self.noisemaker(w)
-
-            return F.linear(input, w, self.bias)
-        
-        elif self.outlier_cols_num > 0:
-
-            if noise_cond:
-                quant_w_noised = self.noisemaker(self.q_weight)
-                out_w = torch.hstack([quant_w_noised, 
-                                      self.fp_weight])               
+            if symmetric:
+                # signed weight/activation is quantized to [-2^(b-1)+1, 2^(b-1)-1]
+                self.thd_neg = -(2 ** (bit - 1)) + 1
+                self.thd_pos = 2 ** (bit - 1) - 1
             else:
-                out_w = torch.hstack([self.q_weight, 
-                                      self.fp_weight])
+                # signed weight/activation is quantized to [-2^(b-1), 2^(b-1)-1]
+                self.thd_neg = -(2 ** (bit - 1))
+                self.thd_pos = 2 ** (bit - 1) - 1
 
-            out_w = out_w[:, self.inv_col_perm]
+        self.per_channel = per_channel
+        self.s = nn.Parameter(torch.ones(1))
 
-            return F.linear(input, out_w, self.bias)   
+    def init_from(self, x, *args, **kwargs):
+        self.mask = torch.ones(x.size(1), dtype=torch.bool)
+        self.mask[self.outlier_ids] = False
+        x_quantize = x[:, self.mask]
+        x = x_quantize.flatten(1)
 
-    def forward(self, input):
-        if self.is_quant_weight:
-            out = self.forward_with_quant_weight(input)
-            return out
+        tmp = torch.zeros(x.shape[0], device=x.device)
+        xmin = torch.minimum(x.min(1)[0], tmp)
+        xmax = torch.maximum(x.max(1)[0], tmp)
+        xmax = torch.maximum(torch.abs(xmin), xmax)
+        tmp = xmin < 0
+        #if torch.any(tmp):
+         #   xmin[tmp] = -xmax[tmp]
+        tmp = (xmin == 0) & (xmax == 0)
+        xmin[tmp] = -1
+        xmax[tmp] = +1
+        
+        alpha = xmax
+        scale = xmax / torch.tensor(self.thd_pos)
+
+        self.s = nn.Parameter(scale.unsqueeze(1))
+
+    def init_from_quik(self, x, alpha):
+        self.mask = torch.ones(x.size(1), dtype=torch.bool)
+        self.mask[self.outlier_ids] = False
+        self.s = nn.Parameter((alpha / torch.tensor(self.thd_pos)).type(x.dtype))
+
+    def forward(self, x):
+        if self.bit >= 32:
+            return x
+        
+        assert not torch.isnan(x).any(), "before quant" 
+        x_quantize = x
+        x_outlier = x[:,~self.mask].clone()
+
+        s_grad_scale = 1.0 / ((self.thd_pos * x.numel()) ** 0.5)
+
+        device = x_quantize.device
+        s_scale = grad_scale(self.s, s_grad_scale).to(device)
+ 
+        assert not torch.isnan(x_quantize).any(), "before frac scale"
+        x_quantize = x_quantize / (s_scale)
+        
+        assert not torch.isnan(x_quantize).any(), f"after frac scale, {torch.isnan(s_scale).any()}, {torch.isinf(s_scale).any()}, {torch.isinf(x_quantize).any()}, {s_scale.all()}"
+        x_quantize = torch.clamp(x_quantize, self.thd_neg, self.thd_pos)
+        x_quantize = round_pass(x_quantize)
+       
+        assert not torch.isnan(x_quantize).any(), "after round pass"
+        x_quantize = x_quantize * (s_scale)
+         
+        assert not torch.isnan(x_quantize).any(), "after quant"
+        x_quantize[:,~self.mask] = x_outlier
+        return x_quantize
+
+
+class QuatizedLinear(nn.Linear):
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        quantized_weight = self.quantizer(self.weight)
+        return F.linear(input, quantized_weight, self.bias)
+
+    def __init__(self, linear, learnable_scales=False, bit=4, outlier_ids=[0], quik_scales=None):
+        super().__init__(
+            in_features=linear.in_features,
+            out_features=linear.out_features,
+            bias=(linear.bias is not None),
+            device=linear.weight.device,
+            dtype=linear.weight.dtype,
+        )
+        self.load_state_dict(linear.state_dict())
+
+        self.quantizer = LsqQuan(bit=bit, symmetric=True, outlier_ids=outlier_ids)
+
+        if quik_scales is None:
+            self.quantizer.init_from(self.weight)
         else:
-            out = self.forward_with_fp_weight(input)
-            return out
+            self.quantizer.init_from_quik(self.weight, quik_scales)
+
 
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -739,17 +379,23 @@ class LlamaRotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        inv_freq = 1.0 / (
+            self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)
+        )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
-            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
+            seq_len=max_position_embeddings,
+            device=self.inv_freq.device,
+            dtype=torch.get_default_dtype(),
         )
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(
+            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
+        )
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -771,13 +417,22 @@ class LlamaRotaryEmbedding(nn.Module):
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+    def __init__(
+        self,
+        dim,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+        scaling_factor=1.0,
+    ):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(
+            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
+        )
         t = t / self.scaling_factor
 
         freqs = torch.outer(t, self.inv_freq)
@@ -790,7 +445,14 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
     """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+    def __init__(
+        self,
+        dim,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+        scaling_factor=1.0,
+    ):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
@@ -799,12 +461,17 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
         if seq_len > self.max_position_embeddings:
             base = self.base * (
-                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+                (self.scaling_factor * seq_len / self.max_position_embeddings)
+                - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+            inv_freq = 1.0 / (
+                base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)
+            )
             self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(
+            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
+        )
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -867,13 +534,24 @@ class LlamaMLP(nn.Module):
             down_proj_slices = self.down_proj.weight.split(slice, dim=1)
 
             gate_proj = torch.cat(
-                [F.linear(x, gate_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1
+                [
+                    F.linear(x, gate_proj_slices[i])
+                    for i in range(self.config.pretraining_tp)
+                ],
+                dim=-1,
             )
-            up_proj = torch.cat([F.linear(x, up_proj_slices[i]) for i in range(self.config.pretraining_tp)], dim=-1)
+            up_proj = torch.cat(
+                [
+                    F.linear(x, up_proj_slices[i])
+                    for i in range(self.config.pretraining_tp)
+                ],
+                dim=-1,
+            )
 
             intermediate_states = (self.act_fn(gate_proj) * up_proj).split(slice, dim=2)
             down_proj = [
-                F.linear(intermediate_states[i], down_proj_slices[i]) for i in range(self.config.pretraining_tp)
+                F.linear(intermediate_states[i], down_proj_slices[i])
+                for i in range(self.config.pretraining_tp)
             ]
             down_proj = sum(down_proj)
         else:
@@ -890,7 +568,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim
+    )
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
@@ -929,10 +609,22 @@ class LlamaAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(
+            self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.v_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.o_proj = nn.Linear(
+            self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias
+        )
         self._init_rope()
 
     def _init_rope(self):
@@ -963,7 +655,11 @@ class LlamaAttention(nn.Module):
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -983,20 +679,31 @@ class LlamaAttention(nn.Module):
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.pretraining_tp > 1:
-            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
+            key_value_slicing = (
+                self.num_key_value_heads * self.head_dim
+            ) // self.config.pretraining_tp
             query_slices = self.q_proj.weight.split(
                 (self.num_heads * self.head_dim) // self.config.pretraining_tp, dim=0
             )
             key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
             value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
 
-            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.config.pretraining_tp)]
+            query_states = [
+                F.linear(hidden_states, query_slices[i])
+                for i in range(self.config.pretraining_tp)
+            ]
             query_states = torch.cat(query_states, dim=-1)
 
-            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.config.pretraining_tp)]
+            key_states = [
+                F.linear(hidden_states, key_slices[i])
+                for i in range(self.config.pretraining_tp)
+            ]
             key_states = torch.cat(key_states, dim=-1)
 
-            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.config.pretraining_tp)]
+            value_states = [
+                F.linear(hidden_states, value_slices[i])
+                for i in range(self.config.pretraining_tp)
+            ]
             value_states = torch.cat(value_states, dim=-1)
 
         else:
@@ -1004,9 +711,15 @@ class LlamaAttention(nn.Module):
             key_states = self.k_proj(hidden_states)
             value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
@@ -1018,16 +731,22 @@ class LlamaAttention(nn.Module):
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(
+            query_states, key_states.transpose(2, 3)
+        ) / math.sqrt(self.head_dim)
 
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
@@ -1043,11 +762,19 @@ class LlamaAttention(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        clipped_attn_weights = clipped_softmax(attn_weights, dim=-1, gamma=self.clip_softmax_gamma, eta=self.clip_softmax_eta, dtype=torch.float32).to(query_states.dtype)
-        #regular_attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        #if not (torch.isclose(clipped_attn_weights, regular_attn_weights).all()):
-         #   print('not consistent')
-        attn_weights = nn.functional.dropout(clipped_attn_weights, p=self.attention_dropout, training=self.training)
+        clipped_attn_weights = clipped_softmax(
+            attn_weights,
+            dim=-1,
+            gamma=self.clip_softmax_gamma,
+            eta=self.clip_softmax_eta,
+            dtype=torch.float32,
+        ).to(query_states.dtype)
+        # regular_attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        # if not (torch.isclose(clipped_attn_weights, regular_attn_weights).all()):
+        #   print('not consistent')
+        attn_weights = nn.functional.dropout(
+            clipped_attn_weights, p=self.attention_dropout, training=self.training
+        )
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -1061,9 +788,18 @@ class LlamaAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
         if self.config.pretraining_tp > 1:
-            attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
-            o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
-            attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
+            attn_output = attn_output.split(
+                self.hidden_size // self.config.pretraining_tp, dim=2
+            )
+            o_proj_slices = self.o_proj.weight.split(
+                self.hidden_size // self.config.pretraining_tp, dim=1
+            )
+            attn_output = sum(
+                [
+                    F.linear(attn_output[i], o_proj_slices[i])
+                    for i in range(self.config.pretraining_tp)
+                ]
+            )
         else:
             attn_output = self.o_proj(attn_output)
 
@@ -1118,19 +854,29 @@ class LlamaFlashAttention2(LlamaAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -1167,7 +913,12 @@ class LlamaFlashAttention2(LlamaAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
@@ -1179,7 +930,14 @@ class LlamaFlashAttention2(LlamaAttention):
         return attn_output, attn_weights, past_key_value
 
     def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+        self,
+        query_states,
+        key_states,
+        value_states,
+        attention_mask,
+        query_length,
+        dropout=0.0,
+        softmax_scale=None,
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -1209,7 +967,14 @@ class LlamaFlashAttention2(LlamaAttention):
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+            (
+                query_states,
+                key_states,
+                value_states,
+                indices_q,
+                cu_seq_lens,
+                max_seq_lens,
+            ) = self._upad_input(
                 query_states, key_states, value_states, attention_mask, query_length
             )
 
@@ -1229,27 +994,39 @@ class LlamaFlashAttention2(LlamaAttention):
                 causal=causal,
             )
 
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+            attn_output = pad_input(
+                attn_output_unpad, indices_q, batch_size, query_length
+            )
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+                query_states,
+                key_states,
+                value_states,
+                dropout,
+                softmax_scale=softmax_scale,
+                causal=causal,
             )
 
         return attn_output
 
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
+    def _upad_input(
+        self, query_layer, key_layer, value_layer, attention_mask, query_length
+    ):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+            indices_k,
         )
         value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
+            indices_k,
         )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim),
+                indices_k,
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -1264,7 +1041,9 @@ class LlamaFlashAttention2(LlamaAttention):
         else:
             # The -q_len: slice assumes left padding.
             attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
+                query_layer, attention_mask
+            )
 
         return (
             query_layer,
@@ -1314,20 +1093,30 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -1362,64 +1151,45 @@ class LlamaSdpaAttention(LlamaAttention):
 
         return attn_output, None, past_key_value
 
+
 LLAMA_ATTENTION_CLASSES = {
     "eager": LlamaAttention,
-    "flash_attention_2": LlamaFlashAttention2,
-    "sdpa": LlamaSdpaAttention,
+    "flash_attention_2": LlamaAttention,  # LlamaFlashAttention2,
+    "sdpa": LlamaAttention,
 }
+
 
 class LlamaDecoderLayer(nn.Module):
     def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](
+            config=config, layer_idx=layer_idx
+        )
 
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = LlamaRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
-        self.QuantizedLinear_decoder = {
-            'replace': config.QuantizedLinear['replace'],
-            'is_quant_weight': config.QuantizedLinear['is_quant_weight'],
-            'outlier_ids': config.QuantizedLinear['outlier_ids'].get(str(layer_idx)),
-            'training_mode': config.QuantizedLinear['training_mode']
-        }
-        self.symmetric_quantizer_decoder = {
-            'add': config.symmetric_quantizer['add'],
-            'layer_bit': config.symmetric_quantizer['layer_bit'].get(str(layer_idx)),
-            'learnable_scale': config.symmetric_quantizer['learnable_scale']
-        }
-        self.weight_quant_noise_decoder = {
-            'add': config.weight_quant_noise['add'],
-            'predict': config.weight_quant_noise['predict'],
-            'compute_scale': config.weight_quant_noise['compute_scale'],
-            'layer_bit': config.weight_quant_noise['layer_bit'].get(str(layer_idx)),
-            'block_size': config.weight_quant_noise['block_size'],
-            'fp_cols_num': config.weight_quant_noise['fp_cols_num']
-        }
+        self.STE = config.STE
+        if self.STE:
+            try:
+                self.layer_bit = config.layer_bit[layer_idx]
+            except KeyError:
+                self.layer_bit = config.layer_bit[str(layer_idx)]
+            try:
+                self.outlier_ids = config.outlier_ids[layer_idx]
+            except KeyError:
+                self.outlier_ids = config.outlier_ids[str(layer_idx)]
+            self.block_size = config.block_size
+            self.learnable_scales = config.learnable_scales
 
-        self.weight_quant_bitnoise_decoder = {
-            'add': config.weight_quant_bitnoise['add'],
-            'predict': config.weight_quant_bitnoise['predict'],
-            'compute_scale': config.weight_quant_bitnoise['compute_scale'],
-            'learnable_scale': config.weight_quant_bitnoise['learnable_scale'],
-            'noise_type': config.weight_quant_bitnoise['noise_type'],
-            'layer_bit': config.weight_quant_bitnoise['layer_bit'].get(str(layer_idx)),
-        }
+            if self.learnable_scales:
+                self.set_learnable_scales()
 
-        if self.QuantizedLinear_decoder['replace']:
-            self.replace_Linear(from_fp=False)
-
-        if self.symmetric_quantizer_decoder['add']:
-            self.add_symmetric_quantizer()
-
-        if self.weight_quant_noise_decoder['add']:
-            self.add_quant_noise_to_weight()
-
-        if self.weight_quant_bitnoise_decoder['add']:
-            self.add_quant_bitnoise_to_weight()
-        
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1429,7 +1199,9 @@ class LlamaDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1481,202 +1253,47 @@ class LlamaDecoderLayer(nn.Module):
 
         return outputs
 
-    def replace_Linear(self, from_fp: bool = True):
-        layers = ['self_attn', 'mlp']
+    def quantize(self):
+        for layer_name in self.outlier_ids.keys():
+            cur_layer = attrgetter(layer_name)(self)
+            cur_layer.weight.data = quantize_with_outliers(
+                cur_layer.weight.data,
+                B=self.layer_bit[layer_name],
+                block_size=self.block_size,
+                idx=self.outlier_ids[layer_name],
+            )
+
+    def set_learnable_scales(self, layer_scales=None):
+        self.learnable_scales = True
+
+        layers = ["mlp", "self_attn"]
         projectors = {
-            'self_attn': ['q_proj', 'k_proj', 'v_proj', 'o_proj'],
-            'mlp': ['up_proj', 'down_proj', 'gate_proj']
+            "self_attn": ["q_proj", "k_proj", "v_proj", "o_proj"],
+            "mlp": ["up_proj", "down_proj", "gate_proj"],
         }
         for layer_name in layers:
             cur_layer = getattr(self, layer_name)
             for proj_name in projectors[layer_name]:
                 cur_projection = getattr(cur_layer, proj_name)
-                
-                outlier_ids = self.QuantizedLinear_decoder['outlier_ids'].get(f'{layer_name}.{proj_name}')
-                training_mode = self.QuantizedLinear_decoder['training_mode']
-                is_quant_weight = self.QuantizedLinear_decoder['is_quant_weight']
 
-                in_features = cur_projection.in_features
-                out_features = cur_projection.out_features
-                outlier_cols_num = len(outlier_ids)
-                
-                # device = cur_projection.weight.device
-                dtype = cur_projection.weight.dtype
+                cur_bit = self.layer_bit[f"{layer_name}.{proj_name}"]
+                outlier_ids = self.outlier_ids[f"{layer_name}.{proj_name}"]
 
-                quantized_projection = QuantizedLinear(
-                    in_features=in_features,
-                    out_features=out_features,
-                    outlier_cols_num=outlier_cols_num,
-                    is_quant_weight=is_quant_weight,
-                    # device=device,
-                    dtype=dtype
+                if layer_scales is None:
+                    cur_scales = None
+                else:
+                    cur_scales = layer_scales[f'{layer_name}.{proj_name}']
+
+                quantized_projection = QuatizedLinear(
+                    cur_projection,
+                    learnable_scales=True,
+                    bit=cur_bit,
+                    outlier_ids=outlier_ids,
+                    quik_scales=cur_scales
                 )
-
-                if from_fp:
-                    quantized_projection.device = cur_projection.weight.device
-                    quantized_projection.from_fp_Linear(cur_projection, outlier_ids, training_mode)
-
                 setattr(cur_layer, proj_name, quantized_projection)
-
-    def replace_QuantizedLinear(self):
-        layers = ['self_attn', 'mlp']
-        projectors = {
-            'self_attn': ['q_proj', 'k_proj', 'v_proj', 'o_proj'],
-            'mlp': ['up_proj', 'down_proj', 'gate_proj']
-        }
-        for layer_name in layers:
-            cur_layer = getattr(self, layer_name)
-            for proj_name in projectors[layer_name]:
-                cur_projection = getattr(cur_layer, proj_name)
                 
-                in_features = cur_projection.in_features
-                out_features = cur_projection.out_features
-                outlier_cols_num = cur_projection.outlier_cols_num
-                lin_projection = nn.Linear(in_features=in_features, 
-                                           out_features=out_features)
-                lin_projection.bias = None
-                
-                if outlier_cols_num == 0:
-                    lin_projection.weight.data = cur_projection.weight.data
 
-                elif outlier_cols_num > 0:
-                    w = torch.hstack([cur_projection.q_weight.data, 
-                                      cur_projection.fp_weight.data])
-                    w = w[:, cur_projection.inv_col_perm]
-                    lin_projection.weight.data = w
-                
-                setattr(cur_layer, proj_name, lin_projection)        
-
-    def add_symmetric_quantizer(self):
-        layers = ['self_attn', 'mlp']
-        projectors = {
-            'self_attn': ['q_proj', 'k_proj', 'v_proj', 'o_proj'],
-            'mlp': ['up_proj', 'down_proj', 'gate_proj']
-        } 
-        for layer_name in layers:
-            cur_layer = getattr(self, layer_name)
-            for proj_name in projectors[layer_name]:
-                cur_projection = getattr(cur_layer, proj_name)
-
-                if isinstance(cur_projection, QuantizedLinear):
-                    cur_bit = self.symmetric_quantizer_decoder['layer_bit'].get(f'{layer_name}.{proj_name}')
-                    learnable_scale = self.symmetric_quantizer_decoder['learnable_scale']
-                    
-                    cur_projection.add_symmetric_quantizer(
-                        bit=cur_bit,
-                        learnable_scale=learnable_scale
-                    )              
-
-    def add_quant_weight(self, quant_params, layer_idx):
-        layers = ['self_attn', 'mlp']
-        projectors = {
-            'self_attn': ['q_proj', 'k_proj', 'v_proj', 'o_proj'],
-            'mlp': ['up_proj', 'down_proj', 'gate_proj']
-        } 
-        for layer_name in layers:
-            cur_layer = getattr(self, layer_name)
-            for proj_name in projectors[layer_name]:
-                cur_projection = getattr(cur_layer, proj_name)
-
-                if isinstance(cur_projection, QuantizedLinear):
-                    params = quant_params[f'model.layers.{layer_idx}.{layer_name}.{proj_name}']
-                    self.symmetric_quantizer_decoder['layer_bit'][f'{layer_name}.{proj_name}'] = \
-                        int(params['bit'])
-
-                    # self.QuantizedLinear_decoder['outlier_ids'][f'{layer_name}.{proj_name}'] = \
-                    #     outlier_ids.tolist()
-                    # cur_projection.set_mask(outlier_ids)
-
-                    cur_bit = self.symmetric_quantizer_decoder['layer_bit'].get(f'{layer_name}.{proj_name}')
-                    learnable_scale = self.symmetric_quantizer_decoder['learnable_scale']
-                    cur_projection.add_symmetric_quantizer(
-                        bit=cur_bit, 
-                        learnable_scale=learnable_scale
-                    )
-                    
-                    outlier_ids = params['fp_indices']
-                    quant_weight = params['quant_weight']
-                    fp_weight = params['fp_weight']
-                    fp_weight = fp_weight[:, outlier_ids.sort()[1]]
-                    alpha_scale = params['alpha']
-                    
-                    cur_projection.add_quant_weight(alpha_scale, quant_weight, fp_weight)
-        
-
-    # def add_quant_noise_to_weight(self):
-    #     layers = ['self_attn', 'mlp']
-    #     projectors = {
-    #         'self_attn': ['q_proj', 'k_proj', 'v_proj', 'o_proj'],
-    #         'mlp': ['up_proj', 'down_proj', 'gate_proj']
-    #     }
-    #     for layer_name in layers:
-    #         cur_layer = getattr(self, layer_name)
-    #         for proj_name in projectors[layer_name]:
-    #             cur_projection = getattr(cur_layer, proj_name)
-
-    #             if isinstance(cur_projection, QuantizedLinear):
-                    
-    #                 add_noise_to_predict = self.weight_quant_noise_decoder['predict']
-    #                 compute_quant_scale = self.weight_quant_noise_decoder['compute_scale']
-    #                 cur_bit = self.weight_quant_noise_decoder['layer_bit'].get(f'{layer_name}.{proj_name}')
-    #                 block_size = self.weight_quant_noise_decoder['block_size']
-    #                 fp_cols_num = self.weight_quant_noise_decoder['fp_cols_num']
-                    
-    #                 cur_projection.add_quant_noise_to_weight(
-    #                     bit=cur_bit, 
-    #                     block_size=block_size,
-    #                     fp_cols_num=fp_cols_num,
-    #                     compute_quant_scale=compute_quant_scale,
-    #                     add_quant_noise_predict=add_noise_to_predict
-    #                 )
-    #     self.weight_quant_noise_decoder['compute_scale'] = False
-
-    def add_quant_bitnoise_to_weight(self):
-        layers = ['self_attn', 'mlp']
-        projectors = {
-            'self_attn': ['q_proj', 'k_proj', 'v_proj', 'o_proj'],
-            'mlp': ['up_proj', 'down_proj', 'gate_proj']
-        }
-        for layer_name in layers:
-            cur_layer = getattr(self, layer_name)
-            for proj_name in projectors[layer_name]:
-                cur_projection = getattr(cur_layer, proj_name)
-
-                if isinstance(cur_projection, QuantizedLinear):
-                    
-                    add_noise_to_predict = self.weight_quant_bitnoise_decoder['predict']
-                    compute_quant_scale = self.weight_quant_bitnoise_decoder['compute_scale']
-                    learnable_quant_scale = self.weight_quant_bitnoise_decoder['learnable_scale']
-                    noise_type = self.weight_quant_bitnoise_decoder['noise_type']
-                    cur_bit = self.weight_quant_bitnoise_decoder['layer_bit'].get(f'{layer_name}.{proj_name}')
-                    
-                    cur_projection.add_quant_bitnoise_to_weight(
-                        bit=cur_bit,
-                        compute_quant_scale=compute_quant_scale,
-                        add_quant_noise_predict=add_noise_to_predict,
-                        noise_type=noise_type
-                    )
-
-                    if learnable_quant_scale:
-                        cur_projection.noisemaker.alpha_scale.requires_grad = True
-                    else:
-                        cur_projection.noisemaker.alpha_scale.requires_grad = False
-
-        self.weight_quant_bitnoise_decoder['compute_scale'] = False
-
-    def quantize_weight(self):
-        layers = ['self_attn', 'mlp']
-        projectors = {
-            'self_attn': ['q_proj', 'k_proj', 'v_proj', 'o_proj'],
-            'mlp': ['up_proj', 'down_proj', 'gate_proj']
-        }
-        for layer_name in layers:
-            cur_layer = getattr(self, layer_name)
-            for proj_name in projectors[layer_name]:
-                cur_projection = getattr(cur_layer, proj_name)
-
-                if isinstance(cur_projection, QuantizedLinear):
-                    cur_projection.quantize_weight()
 
 LLAMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -1808,50 +1425,35 @@ class LlamaModel(LlamaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        if not getattr(config, 'clip_softmax_gamma', None):
+        if not getattr(config, "clip_softmax_gamma", None):
             config.clip_softmax_gamma = 0
 
-        if not getattr(config, 'clip_softmax_eta', None):
+        if not getattr(config, "clip_softmax_eta", None):
             config.clip_softmax_eta = 1
 
-        if not getattr(config, 'QuantizedLinear', None):
-            config.QuantizedLinear = {
-                'replace': False,
-                'is_quant_weight': False,
-                'outlier_ids': {},
-                'training_mode': 'train_full'
-            }
+        if not getattr(config, "layer_bit", None):
+            config.layer_bit = {}
 
-        if not getattr(config, 'symmetric_quantizer', None):
-            config.symmetric_quantizer = {
-                'add': False,
-                'layer_bit': {},
-                'learnable_scale': False
-            }
+        if not getattr(config, "outlier_ids", None):
+            config.outlier_ids = {}
 
-        if not getattr(config, 'weight_quant_noise', None):
-            config.weight_quant_noise = {
-                'add': False,
-                'predict': False,
-                'compute_scale': False,
-                'layer_bit': {},
-                'block_size': None,
-                'fp_cols_num': None
-            }
+        if not getattr(config, "STE", None):
+            config.STE = False
 
-        if not getattr(config, 'weight_quant_bitnoise', None):
-            config.weight_quant_bitnoise = {
-                'add': False,
-                'predict': False,
-                'compute_scale': False,
-                'learnable_scale': False,
-                'noise_type': 'normal',
-                'layer_bit': {}
-            }
+        if not getattr(config, "block_size", None):
+            config.block_size = 64
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        if not getattr(config, "learnable_scales", None):
+            config.learnable_scales = False
+
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.hidden_size, self.padding_idx
+        )
         self.layers = nn.ModuleList(
-            [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                LlamaDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self._use_sdpa = config._attn_implementation == "sdpa"
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
@@ -1867,7 +1469,6 @@ class LlamaModel(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1881,17 +1482,27 @@ class LlamaModel(LlamaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape[:2]
         elif inputs_embeds is not None:
@@ -1916,7 +1527,10 @@ class LlamaModel(LlamaPreTrainedModel):
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+                past_key_values_length,
+                seq_length + past_key_values_length,
+                dtype=torch.long,
+                device=device,
             )
             position_ids = position_ids.unsqueeze(0)
 
@@ -1925,7 +1539,11 @@ class LlamaModel(LlamaPreTrainedModel):
 
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            attention_mask = (
+                attention_mask
+                if (attention_mask is not None and 0 in attention_mask)
+                else None
+            )
         elif self._use_sdpa and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
@@ -1938,7 +1556,10 @@ class LlamaModel(LlamaPreTrainedModel):
         else:
             # 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                attention_mask,
+                (batch_size, seq_length),
+                inputs_embeds,
+                past_key_values_length,
             )
 
         # embed positions
@@ -1989,9 +1610,17 @@ class LlamaModel(LlamaPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+            next_cache = (
+                next_decoder_cache.to_legacy_cache()
+                if use_legacy_cache
+                else next_decoder_cache
+            )
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -2018,162 +1647,27 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             layer.self_attn.clip_softmax_gamma = gamma
         self.model.config.clip_softmax_gamma = gamma
         self.model.config.clip_softmax_eta = eta
-    
-    def replace_Linear(self, outlier_ids, training_mode='train_outlier'):
-        self.model.config.QuantizedLinear['replace'] = True
-        self.model.config.QuantizedLinear['outlier_ids'] = outlier_ids
-        self.model.config.QuantizedLinear['training_mode'] = training_mode
+
+    def enable_ste(self, outlier_ids, layer_bit, block_size=64, learnable_scales=False, quik_scales=None):
+        self.model.config.outlier_ids = outlier_ids
+        self.model.config.layer_bit = layer_bit
+        self.model.config.STE = True
+        self.model.config.block_size = block_size
+        self.model.config.learnable_scales = learnable_scales
 
         for layer_idx in range(self.model.config.num_hidden_layers):
-                self.model.layers[layer_idx].QuantizedLinear_decoder = {
-                    'replace': self.model.config.QuantizedLinear['replace'],
-                    'is_quant_weight': self.model.config.QuantizedLinear['is_quant_weight'],
-                    'outlier_ids': self.model.config.QuantizedLinear['outlier_ids'].get(str(layer_idx)),
-                    'training_mode': self.model.config.QuantizedLinear['training_mode']
-                }
-                self.model.layers[layer_idx].replace_Linear()
-
-    def replace_QuantizedLinear(self):
-
-        self.model.config.QuantizedLinear = {
-                'replace': False,
-                'is_quant_weight': False,
-                'outlier_ids': {},
-                'training_mode': 'train_full'
-            }
-
-        self.model.config.symmetric_quantizer = {
-            'add': False,
-            'layer_bit': {},
-            'learnable_scale': False
-        }
-
-        self.model.config.weight_quant_bitnoise = {
-            'add': False,
-            'predict': False,
-            'compute_scale': False,
-            'learnable_scale': False,
-            'noise_type': 'normal',
-            'layer_bit': {}
-        }
-        
-        for layer_idx in range(self.model.config.num_hidden_layers):
-                self.model.layers[layer_idx].replace_QuantizedLinear() 
-
-                self.model.layers[layer_idx].QuantizedLinear = self.model.config.QuantizedLinear
-                self.model.layers[layer_idx].symmetric_quantizer_decoder = self.model.config.symmetric_quantizer
-                self.model.layers[layer_idx].weight_quant_bitnoise = self.model.config.weight_quant_bitnoise
-
-        #         self.model.layers[layer_idx].QuantizedLinear_decoder = {
-        #             'replace': False,
-        #             'is_quant_weight': False,
-        #             'outlier_ids': {},
-        #             'training_mode': 'train_full'
-        #         }
-        #         self.model.layers[layer_idx].symmetric_quantizer_decoder = {
-        #             'add': False,
-        #             'layer_bit': {},
-        #             'learnable_scale': False
-        #         }
-        #         self.model.layers[layer_idx].weight_quant_bitnoise_decoder = {
-        #             'add': False,
-        #             'predict': False,
-        #             'compute_scale': False,
-        #             'learnable_scale': False,
-        #             'layer_bit': {}
-        #         }
-
-        # self.model.config.QuantizedLinear = self.model.layers[layer_idx].QuantizedLinear_decoder
-        # self.model.config.symmetric_quantizer = self.model.layers[layer_idx].symmetric_quantizer_decoder
-        # self.model.config.weight_quant_bitnoise = self.model.layers[layer_idx].weight_quant_bitnoise_decoder
-
-
-    def add_quant_weight(self, quant_params, learnable_scale):
-        self.model.config.QuantizedLinear['is_quant_weight'] = True
-        self.model.config.symmetric_quantizer['add'] = True    
-        self.model.config.symmetric_quantizer['layer_bit'] = {}
-        self.model.config.symmetric_quantizer['learnable_scale'] = learnable_scale
-
-        for layer_idx in range(self.model.config.num_hidden_layers):
-                self.model.config.symmetric_quantizer['layer_bit'][layer_idx] = {}
-
-                self.model.layers[layer_idx].QuantizedLinear_decoder['is_quant_weight'] = True
-                
-
-                self.model.layers[layer_idx].symmetric_quantizer_decoder = {
-                    'add': self.model.config.symmetric_quantizer['add'],
-                    'layer_bit': {},
-                    'learnable_scale': self.model.config.symmetric_quantizer['learnable_scale']
-                }
-
-                self.model.layers[layer_idx].add_quant_weight(quant_params, layer_idx)
-
-                self.model.config.symmetric_quantizer['layer_bit'][layer_idx] = \
-                    self.model.layers[layer_idx].symmetric_quantizer_decoder['layer_bit']
-
-    # def add_quant_noise_to_weight(self, layer_bit, block_size=128, fp_cols_num=128, compute_scale = True, quant_noise_predict=False):
-    #     self.model.config.weight_quant_noise['add'] = True
-    #     self.model.config.weight_quant_noise['predict'] = quant_noise_predict
-    #     self.model.config.weight_quant_noise['compute_scale'] = compute_scale
-    #     self.model.config.weight_quant_noise['layer_bit'] = layer_bit
-    #     self.model.config.weight_quant_noise['block_size'] = block_size
-    #     self.model.config.weight_quant_noise['fp_cols_num'] = fp_cols_num
-
-    #     for layer_idx in range(self.model.config.num_hidden_layers):
-    #         self.model.layers[layer_idx].weight_quant_noise_decoder = {
-    #             'add': self.model.config.weight_quant_noise['add'],
-    #             'predict': self.model.config.weight_quant_noise['predict'],
-    #             'compute_scale': self.model.config.weight_quant_noise['compute_scale'],
-    #             'layer_bit': self.model.config.weight_quant_noise['layer_bit'].get(str(layer_idx)),
-    #             'block_size': self.model.config.weight_quant_noise['block_size'],
-    #             'fp_cols_num': self.model.config.weight_quant_noise['fp_cols_num']
-    #         }
-    #         self.model.layers[layer_idx].add_quant_noise_to_weight()
-        
-    #     self.model.config.weight_quant_noise['compute_scale'] = False
-
-
-    def add_quant_bitnoise_to_weight(
-        self, 
-        layer_bit, 
-        compute_scale=True, 
-        learnable_scale=False, 
-        quant_noise_predict=False,
-        noise_type='normal'
-    ):
-        self.model.config.weight_quant_bitnoise['add'] = True
-        self.model.config.weight_quant_bitnoise['predict'] = quant_noise_predict
-        self.model.config.weight_quant_bitnoise['learnable_scale'] = learnable_scale
-        self.model.config.weight_quant_bitnoise['compute_scale'] = compute_scale
-        self.model.config.weight_quant_bitnoise['noise_type'] = noise_type        
-        self.model.config.weight_quant_bitnoise['layer_bit'] = layer_bit
-
-        for layer_idx in range(self.model.config.num_hidden_layers):
-            self.model.layers[layer_idx].weight_quant_bitnoise_decoder = {
-                'add': self.model.config.weight_quant_bitnoise['add'],
-                'predict': self.model.config.weight_quant_bitnoise['predict'],
-                'compute_scale': self.model.config.weight_quant_bitnoise['compute_scale'],
-                'learnable_scale': self.model.config.weight_quant_bitnoise['learnable_scale'],
-                'noise_type': self.model.config.weight_quant_bitnoise['noise_type'],
-                'layer_bit': self.model.config.weight_quant_bitnoise['layer_bit'].get(str(layer_idx))
-            }
-            self.model.layers[layer_idx].add_quant_bitnoise_to_weight()
-        
-        self.model.config.weight_quant_bitnoise['compute_scale'] = False
-
-    def quantize_weight(self):
-        for layer_idx in range(self.model.config.num_hidden_layers):
-            self.model.layers[layer_idx].quantize_weight()
-    
-    # def change_training_mode(self, outlier_ids, training_mode):
-    #     assert training_mode in ['train_full', 'train_outlier', 'train_quant'], 'Incorrect mode!'
-        
-    #     self.model.config.training_mode = training_mode
-    #     for layer_idx in range(self.model.config.num_hidden_layers):
-    #         self.model.layers[layer_idx].outlier_ids = outlier_ids[layer_idx]
-    #         self.model.layers[layer_idx].training_mode = training_mode
-    #         self.model.layers[layer_idx].replace_Linear()
-
+            self.model.layers[layer_idx].layer_bit = layer_bit[layer_idx]
+            self.model.layers[layer_idx].outlier_ids = outlier_ids[layer_idx]
+            self.model.layers[layer_idx].STE = True
+            self.model.layers[layer_idx].block_size = block_size
+            self.model.layers[layer_idx].learnable_scales = learnable_scales
+            if learnable_scales:
+                if quik_scales is None:
+                    layer_scales = None
+                else:
+                    layer_scales = quik_scales[layer_idx]
+                self.model.layers[layer_idx].set_learnable_scales(layer_scales=layer_scales)
+        print(self.model)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -2194,7 +1688,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         return self.model
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2233,11 +1729,19 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -2254,8 +1758,13 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         hidden_states = outputs[0]
         if self.config.pretraining_tp > 1:
-            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
-            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
+            lm_head_slices = self.lm_head.weight.split(
+                self.vocab_size // self.config.pretraining_tp, dim=0
+            )
+            logits = [
+                F.linear(hidden_states, lm_head_slices[i])
+                for i in range(self.config.pretraining_tp)
+            ]
             logits = torch.cat(logits, dim=-1)
         else:
             logits = self.lm_head(hidden_states)
@@ -2287,7 +1796,12 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        **kwargs,
     ):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
@@ -2302,7 +1816,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
             # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+            if (
+                attention_mask is not None
+                and attention_mask.shape[1] > input_ids.shape[1]
+            ):
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
             # input_ids based on the past_length.
@@ -2347,7 +1864,10 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+                tuple(
+                    past_state.index_select(0, beam_idx.to(past_state.device))
+                    for past_state in layer_past
+                ),
             )
         return reordered_past
 
@@ -2403,7 +1923,9 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.model(
             input_ids,
@@ -2425,19 +1947,25 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
             batch_size = inputs_embeds.shape[0]
 
         if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+            raise ValueError(
+                "Cannot handle batch sizes > 1 if no padding token is defined."
+            )
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
             if input_ids is not None:
                 # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = (
+                    torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                )
                 sequence_lengths = sequence_lengths % input_ids.shape[-1]
                 sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+        pooled_logits = logits[
+            torch.arange(batch_size, device=logits.device), sequence_lengths
+        ]
 
         loss = None
         if labels is not None:
@@ -2445,7 +1973,9 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -2458,7 +1988,9 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(
+                    pooled_logits.view(-1, self.num_labels), labels.view(-1)
+                )
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
