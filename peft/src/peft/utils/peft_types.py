@@ -35,6 +35,7 @@ class PeftType(str, enum.Enum):
     - LOHA
     - LOKR
     - OFT
+    - SASUT
     """
 
     PROMPT_TUNING = "PROMPT_TUNING"

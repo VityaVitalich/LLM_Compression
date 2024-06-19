@@ -106,6 +106,9 @@ class SASUTModel(BaseTuner):
     prefix: str = "sasut_"
 
     def __init__(self, model, config, adapter_name) -> None:
+        if isinstance(config, dict):
+            config = config[adapter_name]
+
         self.outlier_ids = get_fp_inds_for_quik(
             config.path_to_act_scales, 
             config.outlier_num

@@ -654,11 +654,11 @@ class SASUTLayer(BaseTunerLayer):
     ):
 
         self.set_mask(outlier_ids)
-        weight = linear.weight.data
+        weight = torch.clone(linear.weight.data)
         self.sasut_q_weight.data = weight[:, self.mask]
         self.sasut_fp_weight.data = weight[:, ~self.mask]
 
-        self.bias = nn.Parameter(linear.bias.data) if linear.bias is not None else None
+        self.bias = nn.Parameter(torch.clone(linear.bias.data)) if linear.bias is not None else None
 
            # self.set_training_mode(training_mode)
            # this is implemented in _mark_only_adapters_as_trainable function
