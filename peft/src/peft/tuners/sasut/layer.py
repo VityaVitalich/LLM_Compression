@@ -548,7 +548,7 @@ class BitNoiseQuant(nn.Module):
             w_clipped = torch.where(c2, -alpha, w + w_rand)
             w_out = torch.where(c1, alpha, w_clipped)
         else:
-            w_out = w + w_rand
+            w_out = w + w_rand.to(w.dtype)
         
         return w_out
 
