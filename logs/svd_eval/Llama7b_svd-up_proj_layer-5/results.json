@@ -1,0 +1,67 @@
+{
+  "results": {
+    "hellaswag": {
+      "acc,none": 0.5663214499103765,
+      "acc_stderr,none": 0.004945691164810077,
+      "acc_norm,none": 0.7541326428998207,
+      "acc_norm_stderr,none": 0.004297202530480557,
+      "alias": "hellaswag"
+    }
+  },
+  "configs": {
+    "hellaswag": {
+      "task": "hellaswag",
+      "group": [
+        "multiple_choice"
+      ],
+      "dataset_path": "hellaswag",
+      "training_split": "train",
+      "validation_split": "validation",
+      "process_docs": "<function process_docs at 0x15548271c310>",
+      "doc_to_text": "{{query}}",
+      "doc_to_target": "{{label}}",
+      "doc_to_choice": "choices",
+      "description": "",
+      "target_delimiter": " ",
+      "fewshot_delimiter": "\n\n",
+      "metric_list": [
+        {
+          "metric": "acc",
+          "aggregation": "mean",
+          "higher_is_better": true
+        },
+        {
+          "metric": "acc_norm",
+          "aggregation": "mean",
+          "higher_is_better": true
+        }
+      ],
+      "output_type": "multiple_choice",
+      "repeats": 1,
+      "should_decontaminate": false,
+      "metadata": [
+        {
+          "version": 1.0
+        }
+      ]
+    }
+  },
+  "versions": {
+    "hellaswag": "Yaml"
+  },
+  "n-shot": {
+    "hellaswag": 0
+  },
+  "config": {
+    "model": "hf",
+    "model_args": "pretrained=/home/cache/llama7b_svd/Llama7b_svd-up_proj_layer-5",
+    "batch_size": "16",
+    "batch_sizes": [],
+    "device": "cuda:0",
+    "use_cache": null,
+    "limit": null,
+    "bootstrap_iters": 100000,
+    "gen_kwargs": {}
+  },
+  "git_hash": "499167e"
+}
