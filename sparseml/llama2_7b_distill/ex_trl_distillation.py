@@ -37,9 +37,9 @@ from sparseml.transformers import (
 # from sft_trainer import SFTTrainer
 
 
-model_path = "/home/exp_results/output_llama7b_sparseml/stage_pruning"
-teacher_path = "/home/LLaMA/huggingface/Llama-2-7b-hf"
-output_dir = "./output_trl_sft_test_7b_gsm8k"
+model_path = "/home/llm_compression/Quantization/SparseGPT/output_llama7b_sparseml/stage_sparsity"
+teacher_path = "/home/llm_compression/LLaMA/Llama-2-7b-hf"
+output_dir = "/home/exp_results/kd/output_trl_sft_test_7b_gsm8k"
 
 model = SparseAutoModelForCausalLM.from_pretrained(
     model_path, torch_dtype="auto", device_map="auto"
@@ -101,23 +101,23 @@ print(f"--> Training Set Length = {len(train_dataset)}")
 #       distill_scale: 1.0
 # """
 
-recipe = """
-test_stage:
-  pruning_modifiers:
-    ConstantPruningModifier:
-      targets: ['re:.*q_proj.weight', 're:.*k_proj.weight', 're:.*v_proj.weight',
-      're:.*o_proj.weight', 're:.*gate_proj.weight', 're:.*up_proj.weight',
-      're:.*down_proj.weight']
-      start: 0
-    OutputDistillationModifier:
-      targets: ["model.layers.0"]
-      comparison: "square_head"
-      start: 0
-      orig_scale: 1.0
-      distill_scale: 1.0
-"""
+# recipe = """
+# test_stage:
+#   pruning_modifiers:
+#     ConstantPruningModifier:
+#       targets: ['re:.*q_proj.weight', 're:.*k_proj.weight', 're:.*v_proj.weight',
+#       're:.*o_proj.weight', 're:.*gate_proj.weight', 're:.*up_proj.weight',
+#       're:.*down_proj.weight']
+#       start: 0
+#     OutputDistillationModifier:
+#       targets: ["model.layers.0"]
+#       comparison: "square_head"
+#       start: 0
+#       orig_scale: 1.0
+#       distill_scale: 1.0
+# """
 
-recipe_path = "/home/LLM_compression/sparseml/llama2_7b_distill/distill.yaml"
+recipe = "/home/LLM_Compression/sparseml/llama2_7b_distill/distill.yaml"
 
 data_collator = DefaultDataCollator()
 
