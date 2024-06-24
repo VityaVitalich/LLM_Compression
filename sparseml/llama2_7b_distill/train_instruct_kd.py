@@ -418,17 +418,17 @@ def run_train(
     )
     
     # If limit on cuda memory is specified enforce the limit
-    if model_args.max_memory > 0:
-        mem_info = torch.cuda.mem_get_info()
-        print("Memory info: \n{}".format(mem_info))
-        # total_memory = mem_info[1] * 1e-9 # convert Bytes to GB
-        total_memory = torch.cuda.get_device_properties(0).total_memory  * 2**(-30) # convert Bytes to GB
-        if model_args.max_memory > total_memory:
-            raise ValueError("The specified memory limit {} is greater than the available memory {}.".format(model_args.max_memory, total_memory))
-        else:
-            fraction = model_args.max_memory / total_memory
-            torch.cuda.set_per_process_memory_fraction(fraction)
-            print("Restricting the memory to {} of the total memory to have a limit of {} ({} x {})".format(fraction, model_args.max_memory, fraction, total_memory))
+    # if model_args.max_memory > 0:
+    #     mem_info = torch.cuda.mem_get_info()
+    #     print("Memory info: \n{}".format(mem_info))
+    #     # total_memory = mem_info[1] * 1e-9 # convert Bytes to GB
+    #     total_memory = torch.cuda.get_device_properties(0).total_memory  * 2**(-30) # convert Bytes to GB
+    #     if model_args.max_memory > total_memory:
+    #         raise ValueError("The specified memory limit {} is greater than the available memory {}.".format(model_args.max_memory, total_memory))
+    #     else:
+    #         fraction = model_args.max_memory / total_memory
+    #         torch.cuda.set_per_process_memory_fraction(fraction)
+    #         print("Restricting the memory to {} of the total memory to have a limit of {} ({} x {})".format(fraction, model_args.max_memory, fraction, total_memory))
 
     # Load pretrained tokenizer
     tokenizer_kwargs = {
