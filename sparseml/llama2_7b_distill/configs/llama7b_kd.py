@@ -55,7 +55,7 @@ def model_configs():
     config.gradient_checkpointing = False
     config.report_to = None
 
-    config.recipe = "/home/LLM_compression/sparseml/llama2_7b_distill/configs/distill.yaml"
+    config.recipe = "/home/LLM_Compression/sparseml/llama2_7b_distill/configs/distill.yaml"
     ### eval ###
     # config.evaluation_strategy = 'steps'
     # config.eval_steps = 100

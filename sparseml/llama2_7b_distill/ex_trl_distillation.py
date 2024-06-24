@@ -123,7 +123,7 @@ print(f"--> Training Set Length = {len(train_dataset)}")
 #       distill_scale: 1.0
 # """
 
-recipe = "/home/LLM_Compression/sparseml/llama2_7b_distill/distill.yaml"
+recipe = "/home/LLM_Compression/sparseml/llama2_7b_distill/configs/distill.yaml"
 
 data_collator = DefaultDataCollator()
 
@@ -159,12 +159,12 @@ training_args = TrainingArguments(
     num_train_epochs=0.1,
     logging_steps=50,
     gradient_checkpointing=True,
-    gradient_accumulation_steps=16,
-    learning_rate=5e-5,
+    gradient_accumulation_steps=8,
+    learning_rate=2e-5,
     lr_scheduler_type='cosine',
     per_device_train_batch_size = 4,
     save_strategy = 'steps',
-    save_steps = 25,
+    save_steps = 50,
     bf16=True,
     do_train=True,
     do_eval=False

@@ -565,9 +565,9 @@ def run_train(
 
     assert embedding_size == teacher_embedding_size, 'Check embedding size of student and teacher models'
 
-    if len(tokenizer) > embedding_size:
-        model.resize_token_embeddings(len(tokenizer))
-        teacher.resize_token_embeddings(len(tokenizer))
+    # if len(tokenizer) > embedding_size:
+    #     model.resize_token_embeddings(len(tokenizer))
+    #     teacher.resize_token_embeddings(len(tokenizer))
 
     print(len(tokenizer), embedding_size, teacher_embedding_size)
 
@@ -652,7 +652,8 @@ def run_train(
     #     dataset=None, dataset_config_name=None, max_seq_length=data_args.max_seq_length
     # )
 
-    data_collator = DefaultDataCollator()
+    # data_collator = DefaultDataCollator()
+    data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding="longest")
     trainer = Trainer(
         # model_init=model,
         model=model,
@@ -661,7 +662,7 @@ def run_train(
         recipe=training_args.recipe,
         # recipe_args=training_args.recipe_args,
         args=training_args,
-        # data_args=data_args,
+        data_args=data_args,
         train_dataset=train_dataset,
         eval_dataset=None,
         tokenizer=tokenizer,

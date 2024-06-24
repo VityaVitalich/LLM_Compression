@@ -43,7 +43,8 @@ test_stage:
         "model.layers.27",
         "model.layers.28",
         "model.layers.29",
-        "model.layers.30"
+        "model.layers.30",
+        "model"
       ]
       comparison: "square_head"
       start: 0
