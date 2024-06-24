@@ -13,7 +13,6 @@ test_stage:
   distillation_modifiers:
     OutputDistillationModifier:
       targets: [
-        "model.embed_tokens",
         "model.layers.0",
         "model.layers.1",
         "model.layers.2",

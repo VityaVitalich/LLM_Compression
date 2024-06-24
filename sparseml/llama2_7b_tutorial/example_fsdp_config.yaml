@@ -1,21 +1,22 @@
 compute_environment: LOCAL_MACHINE #Specifies the computing environment where the training is taking place
 debug: false #Indicates whether debugging mode is enabled.
 distributed_type: FSDP 
-downcast_bf16: 'no' #Determines whether to downcast data types to bf16
+downcast_bf16: 'yes' #Determines whether to downcast data types to bf16
 fsdp_config:
   fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP #layers are wrapped based on a policy tailored for transformer models
   fsdp_backward_prefetch_policy: BACKWARD_PRE #Controls the prefetching of data during the backward pass
   fsdp_cpu_ram_efficient_loading: false #Indicates whether to use CPU RAM-efficient loading strategies
   fsdp_forward_prefetch: false #Determines whether to enable prefetching of data during the forward pass
   fsdp_offload_params: false #Specifies whether to offload parameters to CPU to save GPU memory
-  fsdp_sharding_strategy: 2 # 1 - each parameter is split into shards, and each shard is distributed across all available devices
+  fsdp_sharding_strategy: 1 # 1 - each parameter is split into shards, and each shard is distributed across all available devices
   fsdp_state_dict_type: SHARDED_STATE_DICT #the state dictionary will be saved in a sharded manner
   fsdp_sync_module_states: true #Indicates whether to synchronize the module states across different devices
   fsdp_use_orig_params: false #Specifies whether to use the original parameters instead of sharded ones.
 machine_rank: 0 #Denotes the rank of the current machine in a distributed setup
 main_training_function: main #`main` refers to the function in the training script that is responsible for orchestrating the training process
+mixed_precision: bf16
 num_machines: 1 
-num_processes: 4
+num_processes: 2
 rdzv_backend: static #Sets the backend used for rendezvous (coordinating processes in distributed training)
 same_network: true #Indicates whether all machines are on the same network
 tpu_env: []
