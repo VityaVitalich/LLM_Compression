@@ -38,8 +38,8 @@ from sparseml.transformers import (
 
 
 model_path = "/home/llm_compression/Quantization/SparseGPT/output_llama7b_sparseml/stage_sparsity"
-teacher_path = "/home/llm_compression/LLaMA/Llama-2-7b-hf"
-output_dir = "/home/exp_results/kd/output_trl_sft_test_7b_gsm8k"
+teacher_path = "/home/exp_results/instruct/llama_quik4bit3bit_normal_noise_wanda/merged_500"
+output_dir = "/home/exp_results/kd/distill_llama_7b_ultrachat"
 
 model = SparseAutoModelForCausalLM.from_pretrained(
     model_path, torch_dtype="auto", device_map="auto"
@@ -72,9 +72,15 @@ tokenizer = SparseAutoTokenizer.from_pretrained(model_path)
 # tokenizer = AutoTokenizer.from_pretrained(model_path)
 
 # Load gsm8k using SparseML dataset tools
+# data_args = DataTrainingArguments(
+#     dataset="gsm8k", dataset_config_name="main", max_seq_length=32
+# )
+
+# Load ultrachat using SparseML dataset tools
 data_args = DataTrainingArguments(
-    dataset="gsm8k", dataset_config_name="main", max_seq_length=32
+    dataset="ultrachat-200k", dataset_config_name="default", max_seq_length=1024
 )
+
 dataset_manager = TextGenerationDataset.load_from_registry(
     data_args.dataset,
     data_args=data_args,
@@ -150,31 +156,34 @@ data_collator = DefaultDataCollator()
 training_args = TrainingArguments(
     recipe=recipe,
     output_dir=output_dir,
-    num_train_epochs=0.6,
+    num_train_epochs=0.1,
     logging_steps=50,
     gradient_checkpointing=True,
-    learning_rate=5e-4,
+    gradient_accumulation_steps=16,
+    learning_rate=5e-5,
     lr_scheduler_type='cosine',
-    per_device_train_batch_size = 1,
+    per_device_train_batch_size = 4,
+    save_strategy = 'steps',
+    save_steps = 25,
     bf16=True,
     do_train=True,
     do_eval=False
 )
 
 # initialize trainer
-trainer = Trainer(
-    model=model,
-    # model_state_path=model_path,
-    recipe=training_args.recipe,
-    # recipe_args='{"num_epochs": 10.0, "qat_start_epoch": 7.0, "observer_epoch": 9.0}',
-    teacher=teacher,
-    # metadata_args=["per_device_train_batch_size","per_device_eval_batch_size","fp16"],
-    args=training_args,
-    train_dataset=train_dataset,
-    # eval_dataset=train_dataset["validation"],
-    tokenizer=tokenizer,
+# trainer = Trainer(
+#     model=model,
+#     # model_state_path=model_path,
+#     recipe=training_args.recipe,
+#     # recipe_args='{"num_epochs": 10.0, "qat_start_epoch": 7.0, "observer_epoch": 9.0}',
+#     teacher=teacher,
+#     # metadata_args=["per_device_train_batch_size","per_device_eval_batch_size","fp16"],
+#     args=training_args,
+#     train_dataset=train_dataset,
+#     # eval_dataset=train_dataset["validation"],
+#     tokenizer=tokenizer,
 
-)
+# )
 
 
 trainer = Trainer(
@@ -183,7 +192,7 @@ trainer = Trainer(
     # model_state_path=model_path,
     teacher=teacher,
     recipe=training_args.recipe,
-    recipe_args=training_args.recipe_args,
+    # recipe_args=training_args.recipe_args,
     args=training_args,
     data_args=data_args,
     train_dataset=train_dataset,
