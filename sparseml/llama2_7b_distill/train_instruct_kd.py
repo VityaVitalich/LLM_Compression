@@ -82,6 +82,14 @@ class ModelArguments:
             )
         },
     )
+    teacher_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "The teacher model for knowledge distillation"
+            )
+        },
+    )    
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
@@ -156,7 +164,7 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    dataset_name: Optional[str] = field(
+    dataset: Optional[str] = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
     dataset_config_name: Optional[str] = field(
@@ -186,24 +194,24 @@ class DataTrainingArguments:
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
-    dataset_percentage: Optional[int] = field(
-        default=100,
-        metadata={
-            "help": "The percentage of the dataset used for computation"
-        },  
-    )
-    seed: Optional[int] = field(
-        default=11,
-        metadata={
-            "help": "Seed for splitting data on train and validation parts"
-        },
-    )
-    validation_split_percentage: Optional[int] = field(
-        default=5,
-        metadata={
-            "help": "The percentage of the train set used as validation set in case there's no validation split"
-        },
-    )
+    # dataset_percentage: Optional[int] = field(
+    #     default=100,
+    #     metadata={
+    #         "help": "The percentage of the dataset used for computation"
+    #     },  
+    # )
+    # split_seed: Optional[int] = field(
+    #     default=11,
+    #     metadata={
+    #         "help": "Seed for splitting data on train and validation parts"
+    #     },
+    # )
+    # validation_split_percentage: Optional[int] = field(
+    #     default=5,
+    #     metadata={
+    #         "help": "The percentage of the train set used as validation set in case there's no validation split"
+    #     },
+    # )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
@@ -298,37 +306,37 @@ def load_hf_datasets(
     data_args
 ):
     # Load the dataset
-    if data_args.dataset_name is not None:
+    if data_args.dataset is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
-            data_args.dataset_name,
+            data_args.dataset,
             data_args.dataset_config_name,
             streaming=data_args.streaming,
             trust_remote_code=data_args.trust_remote_code
         )
 
-        if "validation" not in raw_datasets.keys():
-            raw_datasets["validation"] = load_dataset(
-                data_args.dataset_name,
-                data_args.dataset_config_name,
-                split=f"train[:{data_args.validation_split_percentage}%]",
-                streaming=data_args.streaming,
-                trust_remote_code=data_args.trust_remote_code
-            )
-            raw_datasets["train"] = load_dataset(
-                data_args.dataset_name,
-                data_args.dataset_config_name,
-                split=f"train[{data_args.validation_split_percentage}%:]",
-                streaming=data_args.streaming,
-                trust_remote_code=data_args.trust_remote_code
-            )
+        # if "validation" not in raw_datasets.keys():
+        #     raw_datasets["validation"] = load_dataset(
+        #         data_args.dataset_name,
+        #         data_args.dataset_config_name,
+        #         split=f"train[:{data_args.validation_split_percentage}%]",
+        #         streaming=data_args.streaming,
+        #         trust_remote_code=data_args.trust_remote_code
+        #     )
+        #     raw_datasets["train"] = load_dataset(
+        #         data_args.dataset_name,
+        #         data_args.dataset_config_name,
+        #         split=f"train[{data_args.validation_split_percentage}%:]",
+        #         streaming=data_args.streaming,
+        #         trust_remote_code=data_args.trust_remote_code
+        #     )
         
-        if data_args.dataset_percentage < 100:
-            dataset_frac = data_args.dataset_percentage / 100
-            dataset_parts = raw_datasets['train'].train_test_split(train_size=dataset_frac, seed=data_args.seed)
-            raw_datasets['train'] = dataset_parts['train']
-            dataset_parts = raw_datasets['validation'].train_test_split(test_size=dataset_frac, seed=data_args.seed)
-            raw_datasets['validation'] = dataset_parts['test']
+        # if data_args.dataset_percentage < 100:
+        #     dataset_frac = data_args.dataset_percentage / 100
+        #     dataset_parts = raw_datasets['train'].train_test_split(train_size=dataset_frac, seed=data_args.seed)
+        #     raw_datasets['train'] = dataset_parts['train']
+        #     dataset_parts = raw_datasets['validation'].train_test_split(test_size=dataset_frac, seed=data_args.seed)
+        #     raw_datasets['validation'] = dataset_parts['test']
 
         return raw_datasets
 
@@ -357,18 +365,19 @@ def run_train(
     config = config_dict
 
     data_args = DataTrainingArguments(
-        dataset_name = config['data']['dataset_name'],
+        dataset = config['data']['dataset_name'],
         dataset_config_name = config['data']['dataset_config_name'],
-        validation_split_percentage = config['data']['validation_split_percentage'],
         max_seq_length = config['data']['max_seq_length'],
-        dataset_percentage = config['data']['dataset_percentage'],
-        seed = config['data']['seed'],
+        # dataset_percentage = config['data']['dataset_percentage'],
+        # seed = config['data']['seed'],
+        # validation_split_percentage = config['data']['validation_split_percentage'],
         trust_remote_code = config['data']['trust_remote_code'],
         preprocessing_num_workers = config['data']['preprocessing_num_workers']
     )
 
     model_args = ModelArguments(
         model_name_or_path = config['model_name_or_path'], #"/home/projects/LLaMA/huggingface/Llama-2-7b-hf",
+        teacher_name_or_path = config['teacher_name_or_path'],
         config_name = config['model_config_name'], #"/home/projects/LLaMA/huggingface/Llama-2-7b-hf/config.json",
         tokenizer_name = config['tokenizer_name'], #"/home/projects/LLaMA/huggingface/Llama-2-7b-hf",
         use_fast_tokenizer = config['use_fast_tokenizer'],
@@ -441,8 +450,11 @@ def run_train(
         torch_dtype=torch.bfloat16, device_map="auto"
     )
 
+    print('teacher')
+    print(model_args.teacher_name_or_path)
     teacher = SparseAutoModelForCausalLM.from_pretrained(
-        model_args.teacher_name_or_path, torch_dtype="auto", device_map="auto"
+        model_args.teacher_name_or_path, 
+        torch_dtype=torch.bfloat16, device_map="auto"
     )
 
     # model = AutoModelForCausalLM.from_pretrained(
@@ -632,6 +644,14 @@ def run_train(
     #     data_collator=DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding="longest")
     # )
 
+    # data_args = DataTrainingArguments(
+    #     dataset="gsm8k", dataset_config_name="main", max_seq_length=32
+    # )
+
+    # training_data_args = DataTrainingArguments(
+    #     dataset=None, dataset_config_name=None, max_seq_length=data_args.max_seq_length
+    # )
+
     data_collator = DefaultDataCollator()
     trainer = Trainer(
         # model_init=model,
@@ -639,9 +659,9 @@ def run_train(
         # model_state_path=model_path,
         teacher=teacher,
         recipe=training_args.recipe,
-        recipe_args=training_args.recipe_args,
+        # recipe_args=training_args.recipe_args,
         args=training_args,
-        data_args=data_args,
+        # data_args=data_args,
         train_dataset=train_dataset,
         eval_dataset=None,
         tokenizer=tokenizer,
