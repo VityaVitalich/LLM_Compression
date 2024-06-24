@@ -22,22 +22,22 @@ def model_configs():
     data.max_seq_length = 2048
     data.trust_remote_code = True
     data.preprocessing_num_workers = 8
-    data.seed = 15
-
+    data.seed = 11
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = '/home/exp_results/instruct/llama2_7b_wanda_max_sparsity_0@50_outliers_after_3bit_oo/merged_375'
+    config.model_name_or_path = '/home/llm_compression/Quantization/SparseGPT/output_llama7b_sparseml/stage_sparsity'
     config.model_config_name = None
     config.tokenizer_name = None
     config.token = None
     config.use_fast_tokenizer = True
     config.trust_remote_code = True
     config.max_memory = 79
-    config.teacher_name_or_path = '/home/exp_results/instruct/llama2_7b_wanda_max_sparsity_0@50_outliers_after_3bit_oo/merged_375'
+    config.teacher_name_or_path = '/home/exp_results/instruct/llama_quik4bit3bit_normal_noise_wanda/merged_500'
+    
     ## SAVING DIRS ###
     # config.cache_dir = None
-    config.output_dir = '/home/exp_results/instruct//home/llm_compression/Quantization/Wanda/llama2_7b_wanda_max_sparsity_0@50_outliers_after_3bit_oo_4bit3bit'
+    config.output_dir = '/home/exp_results/sparseml/tutorial/distill/sparsegpt_kd_tulu_noise4bit4bit'
 
     ### TRAINING ###
     config.run_name = 'outliers_4bit'
@@ -48,7 +48,7 @@ def model_configs():
     config.weight_decay = 0.0
     config.lr_scheduler_type = 'linear'
     config.warmup_ratio =  0.03
-    config.seed = 15
+    config.seed = 11
     config.per_device_train_batch_size = 2
     config.per_device_eval_batch_size = 2
     config.gradient_accumulation_steps = 16
@@ -83,7 +83,6 @@ def model_configs():
         'path_to_act_scales': '/home/llm_compression/Quantization/Weight_scales/wanda_scales/archive/llama7b_wanda_scales_w4_aMax_ptb.pt',
         'fp_features_num': 128, 
     }
-
 
     ### QuantizedLinear
     config.QuantizedLinear = {
