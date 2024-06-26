@@ -68,6 +68,7 @@ def llama_parser():
     parser.add_argument('--fp_threshold', type=float, default=0.0, help='Threshold where we put the fp features to zero.')
     # parser.add_argument('--fp_relative', action='store_true', help='Use relative features for number of fp_features (larger layers have more fp_features)')
     parser.add_argument('--fp_relative', type=str, default=None, help='Use relative features for number of fp_features (larger layers have more fp_features)')
+    parser.add_argument('--retain_sparsity', action='store_true', help='Retain sparsity of weight matrices during quantization')
     # Act. Quantization Params:
     parser.add_argument('--a_bits', type=int, default=16, choices=[4, 8, 16])
 
@@ -206,7 +207,8 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                     modules_quik[name] = quik_utils.QUIK(
                     layer=subset[name],
                     act_scales=layer_scales,
-                    fp_features=outlier_num
+                    fp_features=outlier_num,
+                    retain_sparsity=args.retain_sparsity
                     )
                 modules_quik[name].quantizer = quant.WeightQuantizer()
 

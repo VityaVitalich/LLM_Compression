@@ -6,7 +6,8 @@ import math
 class QUIK:
     def __init__(self, layer,
                  act_scales=None,
-                 fp_features=0):
+                 fp_features=0,
+                 retain_sparsity=False):
         
         if isinstance(layer, quant.ActQuantWrapper):
             layer = layer.module
@@ -39,6 +40,8 @@ class QUIK:
         
         self.quant_weight = None
         self.alpha_scale = None
+
+        self.retain_sparsity = retain_sparsity
 
     def add_batch(self, inp, out):
 
@@ -95,6 +98,9 @@ class QUIK:
 
         q_int = torch.zeros_like(W)
 
+        if self.retain_sparsity:
+            sparse_mask = (W == 0.0) 
+
         for i1 in range(0, self.columns, blocksize):
             i2 = min(i1 + blocksize, self.columns)
             if i1 >= self.columns - self.fp_features and self.fp_features > 0:
@@ -109,6 +115,9 @@ class QUIK:
             Hinv1 = Hinv[i1:i2, i1:i2]
 
             q_int1 = torch.zeros_like(W1)
+
+            if self.retain_sparsity:
+                block_sparse_mask = (W1 == 0.0)
 
             for i in range(count):
                 if i + i1 >= self.columns - self.fp_features and self.fp_features > 0:
@@ -132,6 +141,10 @@ class QUIK:
                 Losses1[:, i] = (w - w_dq) ** 2 / d ** 2
 
                 err1 = (w - w_dq) / d
+
+                if self.retain_sparsity:
+                    err1 = err1 * (~block_sparse_mask[:, i])
+                    
                 W1[:, i:] -= err1.unsqueeze(1).matmul(Hinv1[i, i:].unsqueeze(0))
                 Err1[:, i] = err1
 
