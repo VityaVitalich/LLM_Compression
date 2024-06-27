@@ -548,7 +548,7 @@ class BitNoiseQuant(nn.Module):
             w_clipped = torch.where(c2, -alpha, w + w_rand)
             w_out = torch.where(c1, alpha, w_clipped)
         else:
-            w_out = w + w_rand.to(w.dtype)
+            w_out = w + w_rand #.to(w.dtype)
         
         return w_out
 
@@ -738,7 +738,7 @@ class Linear(nn.Module, SASUTLayer):
 
                 base_layer.weight.data = orig_weights
             else:
-                base_layer.weight.data[:, ~self.mask] += self.sasut_fp_weight
+                base_layer.weight.data[:, ~self.mask] = self.sasut_fp_weight
             self.merged_adapters.append(active_adapter)
 
     def unmerge(self) -> None:

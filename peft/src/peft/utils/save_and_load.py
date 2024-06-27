@@ -190,7 +190,7 @@ def set_peft_model_state_dict(model, peft_model_state_dict, adapter_name="defaul
         PeftType.IA3,
         PeftType.OFT,
         PeftType.POLY,
-        PeftType.SASUT
+     #   PeftType.SASUT
     ):
         peft_model_state_dict = {}
         parameter_prefix = {
@@ -218,7 +218,7 @@ def set_peft_model_state_dict(model, peft_model_state_dict, adapter_name="defaul
             rank_pattern = config.rank_pattern
             if rank_pattern is not None:
                 model.resize_modules_by_rank_pattern(rank_pattern, adapter_name)
-    elif config.is_prompt_learning or config.peft_type == PeftType.ADAPTION_PROMPT:
+    elif config.is_prompt_learning or config.peft_type == PeftType.ADAPTION_PROMPT or config.peft_type == PeftType.SASUT:
         peft_model_state_dict = state_dict
     else:
         raise NotImplementedError
