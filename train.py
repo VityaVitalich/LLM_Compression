@@ -8,7 +8,7 @@ from functools import partial
 
 import torch
 from tqdm import tqdm
-from peft import get_peft_model, TaskType, LoraConfig
+from peft import get_peft_model, TaskType, LoraConfig, SASUTConfig
 
 from ste_utils import prepare_llama_ste, prepare_scales_quik
 from collators import (
@@ -243,15 +243,6 @@ def run_train(
 
     if config.use_lora:
         task_type = TaskType.CAUSAL_LM
-        target_modules = [
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "up_proj",
-            "down_proj",
-            "gate_proj",
-        ]
         lora_config = LoraConfig(
             task_type=task_type,
             inference_mode=False,
@@ -263,7 +254,17 @@ def run_train(
             use_dora=config.dora
         )
         model = get_peft_model(model, lora_config)
+    if config.use_sasut:
+        assert not config.use_lora, "Not sure sasut will work properly with lora now"
 
+        sasut_config = SASUTConfig(
+            outlier_num=config.sasut_outlier_num,
+            path_to_act_scales=config.sasut_path_to_act_scales,
+            noise_type=config.sasut_noise_type,
+            target_modules=config.sasut_target_modules,
+            compute_quant_scale=config.sasut_compute_quant_scale
+        )
+        model = get_peft_model(model, sasut_config)
     # Load pretrained tokenizer
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
