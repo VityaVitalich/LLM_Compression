@@ -16,14 +16,14 @@ def model_configs():
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = "meta-llama/Llama-2-7b-hf"
+    config.model_name_or_path = "/home/cache/falcon7b_3bit"
     config.model_config_name = None
     config.tokenizer_name = None
     config.token = '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'
 
     ### SAVING DIRS ###
     config.cache_dir = '/home/cache/'
-    config.output_dir = '/home/LLM_Compression/ckpts/lora/Llama7b_sasut_test/'
+    config.output_dir = '/home/LLM_Compression/ckpts/lora/falcon7b_3bit_sasut/'
     
     ### TRAINING ###
     config.learning_rate = 1e-4
@@ -37,7 +37,7 @@ def model_configs():
     config.gradient_accumulation_steps = 16
     config.gradient_checkpointing = False
     config.report_to = 'wandb'
-    config.run_name = 'Llama7b_sasut_test'
+    config.run_name = 'falcon7b_3bit_sasut'
     ### eval ###
     config.evaluation_strategy = 'steps'
     config.eval_steps = 250
@@ -61,9 +61,9 @@ def model_configs():
 
     ### OUTLIER TUNING = SASUT ###
     config.use_sasut = True
-    config.sasut_path_to_act_scales = '/home/LLM_Compression/QUIK/experiments/act_scales/llama7b_owq_w4_ptb_max.pt'
+    config.sasut_path_to_act_scales = '/home/LLM_Compression/QUIK/experiments/act_scales/falcon-7b.pt'
     config.sasut_outlier_num = 128
-    config.sasut_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"]
+    config.sasut_target_modules = ["query_key_value", "dense", "dense_h_to_4h", "dense_4h_to_h"]
     config.sasut_noise_type = 'normal'
     config.sasut_compute_quant_scale = True
 
