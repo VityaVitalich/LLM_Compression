@@ -334,7 +334,7 @@ class HFLM(LM):
     def max_length(self):
         if self._max_length:  # if max length manually set, return it
             return self._max_length
-        seqlen_config_attrs = ("n_positions", "max_position_embeddings", "n_ctx")
+        seqlen_config_attrs = ("n_positions", "max_position_embeddings", "n_ctx", "max_sequence_length")
         for attr in seqlen_config_attrs:
             if hasattr(self.model.config, attr):
                 return getattr(self.model.config, attr)
