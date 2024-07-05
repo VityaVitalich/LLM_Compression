@@ -19,7 +19,7 @@
 
 #SBATCH --gpus=4
 
-srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trinity/home/v.moskvoretskii/images/new_clipped_sm.sif bash -c '
+srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trinity/home/v.moskvoretskii/images/glm.sif bash -c '
     ls;
     cd /home;
     ls;

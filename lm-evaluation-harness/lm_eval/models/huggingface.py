@@ -24,6 +24,8 @@ from lm_eval.utils import MultiTokenEOSCriteria, stop_sequences_criteria
 
 from accelerate import Accelerator, find_executable_batch_size, DistributedType
 from typing import List, Optional, Union, Tuple, Literal
+from transformers import AutoModelForSeq2SeqLM
+#MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES['glm'] = AutoModelForSeq2SeqLM
 
 SAVING_DIR = '/home/data/compression/'
 
@@ -260,6 +262,7 @@ class HFLM(LM):
             self.batch_size_per_gpu = int(batch_size)
 
         if isinstance(pretrained, str):
+            self.pretrained = pretrained
             # multigpu data-parallel support when launched with accelerate
             if gpus > 1:
                 if parallelize:
@@ -331,7 +334,7 @@ class HFLM(LM):
     def max_length(self):
         if self._max_length:  # if max length manually set, return it
             return self._max_length
-        seqlen_config_attrs = ("n_positions", "max_position_embeddings", "n_ctx")
+        seqlen_config_attrs = ("n_positions", "max_position_embeddings", "n_ctx", "max_sequence_length")
         for attr in seqlen_config_attrs:
             if hasattr(self.model.config, attr):
                 return getattr(self.model.config, attr)
@@ -483,14 +486,17 @@ class HFLM(LM):
             if 'pretrained_path' in model_kwargs.keys():
                 self._model = torch.load(model_kwargs['pretrained_path'])
             else:
-                self._model = self.AUTO_MODEL_CLASS.from_pretrained(
-                    pretrained,
-                    revision=revision,
-                    torch_dtype=utils.get_dtype(dtype),
-                    trust_remote_code=trust_remote_code,
+                if 'glm' in pretrained:
+                    self._model = AutoModelForSeq2SeqLM.from_pretrained(pretrained, trust_remote_code=True, torch_dtype=utils.get_dtype(dtype), **model_kwargs)
+                else:
+                    self._model = self.AUTO_MODEL_CLASS.from_pretrained(
+                        pretrained,
+                        revision=revision,
+                        torch_dtype=utils.get_dtype(dtype),
+                        trust_remote_code=trust_remote_code,
                 #    device_map="auto",
-                    **model_kwargs,
-                )
+                        **model_kwargs,
+                    )
         else:
             try:
                 from auto_gptq import AutoGPTQForCausalLM
@@ -627,7 +633,9 @@ class HFLM(LM):
                 add_special_tokens = False
             elif self.AUTO_MODEL_CLASS == transformers.AutoModelForSeq2SeqLM:
                 add_special_tokens = True
-
+        
+        if 'glm' in self.pretrained:
+            add_special_tokens = True
         encoding = self.tokenizer.encode(string, add_special_tokens=add_special_tokens)
 
         # left-truncate the encoded context to be at most `left_truncate_len` tokens long
@@ -651,7 +659,9 @@ class HFLM(LM):
             add_special_tokens = False
         elif self.AUTO_MODEL_CLASS == transformers.AutoModelForSeq2SeqLM:
             add_special_tokens = True
-
+        
+        if 'glm' in self.pretrained:
+            add_special_tokens = True
         encoding = self.tokenizer(
             strings,
             truncation=truncation,
@@ -693,6 +703,7 @@ class HFLM(LM):
             if attn_mask is not None or labels is not None:
                 assert attn_mask is not None and labels is not None
                 assert self.AUTO_MODEL_CLASS == transformers.AutoModelForSeq2SeqLM
+                print('harness', inps.size(), labels.size())
                 return self.model(
                     input_ids=inps, attention_mask=attn_mask, labels=labels
                 ).logits

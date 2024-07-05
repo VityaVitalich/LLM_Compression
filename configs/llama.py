@@ -16,17 +16,17 @@ def model_configs():
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    config.model_name_or_path = '/home/cache/Llama8b_4bit_128fp_owq_max_4/' # "meta-llama/Llama-2-7b-hf"
+    config.model_name_or_path = "meta-llama/Llama-2-7b-hf"
     config.model_config_name = None
     config.tokenizer_name = None
-    config.token = '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'
+    config.token = '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'
 
     ### SAVING DIRS ###
     config.cache_dir = '/home/cache/'
-    config.output_dir = '/home/LLM_Compression/ckpts/lora/Llama8b_tulu_quik_4bit_lora/'
+    config.output_dir = '/home/LLM_Compression/ckpts/lora/Llama7b_sasut_test/'
     
     ### TRAINING ###
-    config.learning_rate = 1e-5
+    config.learning_rate = 1e-4
     config.warmup_steps = 30
     config.weight_decay = 0
     config.seed = 11
@@ -37,13 +37,13 @@ def model_configs():
     config.gradient_accumulation_steps = 16
     config.gradient_checkpointing = False
     config.report_to = 'wandb'
-    config.run_name = 'Llama8b_tulu_quik_4bit_lora'
+    config.run_name = 'Llama7b_sasut_test'
     ### eval ###
-    config.evaluation_strategy = 'no'
-    config.eval_steps = 125
+    config.evaluation_strategy = 'steps'
+    config.eval_steps = 250
     ### save ###
     config.save_strategy = 'steps'
-    config.save_steps = 500
+    config.save_steps = 250
 
 
     ### SOFTMAX CLIP ###
@@ -52,12 +52,20 @@ def model_configs():
     config.clip_softmax_gamma = -12/512
 
     ### LORA ###
-    config.use_lora = True
+    config.use_lora = False
     config.lora_rank = 64
     config.lora_alpha = 16
     config.lora_dropout = 0.1
     config.lora_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"]
     config.dora = False
+
+    ### OUTLIER TUNING = SASUT ###
+    config.use_sasut = True
+    config.sasut_path_to_act_scales = '/home/LLM_Compression/QUIK/experiments/act_scales/llama7b_owq_w4_ptb_max.pt'
+    config.sasut_outlier_num = 128
+    config.sasut_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"]
+    config.sasut_noise_type = 'normal'
+    config.sasut_compute_quant_scale = True
 
     ### NORM TWEEKING ###
     config.norm_tweek = False

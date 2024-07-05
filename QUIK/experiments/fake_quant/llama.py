@@ -38,6 +38,12 @@ def llama_parser():
     )
 
     parser.add_argument(
+        '--replace_QuantizedLinear',
+        help='Replace QuantizedLinear layers by Linear ones to quantize model',
+        action='store_true'
+    )
+
+    parser.add_argument(
         '--path_to_act_scales', type=str,
         help='act_scales to load;',
         default='../act_scales/Llama-2-7b-hf.pt'
@@ -67,7 +73,7 @@ def llama_parser():
     parser.add_argument('--fp_features', type=int, default=0, help='Number of features to keep in FP16.')
     parser.add_argument('--fp_threshold', type=float, default=0.0, help='Threshold where we put the fp features to zero.')
     parser.add_argument('--fp_relative', action='store_true', help='Use relative features for number of fp_features (larger layers have more fp_features)')
-    
+    # parser.add_argument('--fp_relative', type=str, help='Use relative features for number of fp_features (larger layers have more fp_features)')
     # Act. Quantization Params:
     parser.add_argument('--a_bits', type=int, default=16, choices=[4, 8, 16])
 
@@ -175,14 +181,14 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                 if args.fp_relative:
                     outlier_num = int(subset[name].in_features/model.config.hidden_size)*args.fp_features
                     print(subset[name].in_features, model.config.hidden_size, outlier_num)
+                    # outlier_num = torch.load(args.fp_relative)
+                    # outlier_num = outlier_num['model.layers.{}.{}'.format(i, name)].shape[0]
                 else:
                     outlier_num = args.fp_features
                 
                 layer_scales = None
                 if outlier_num > 0:
- #                   print(act_scales)
                     layer_scales = act_scales['model.layers.{}.{}'.format(i, name)]
-#                    print(layer_scales)
 
                     max_val = layer_scales.abs().max()
                     fp_threshold = args.fp_threshold
@@ -193,8 +199,7 @@ def llama_sequential(model, dataloader, act_scales, dev, args):
                     if max_val <= fp_threshold:
                         outlier_num = 0
                         layer_scales = None
-                  #  print(layer_scales)
-                   # return 'aaa'
+
                 if args.sparseGPT:
                     modules_quik[name] = sparseGPT_utils.SparseGPT(
                     layer=subset[name],
@@ -295,9 +300,8 @@ if __name__ == '__main__':
         import wandb
         wandb.init(project="quik", entity=args.wandb_name)
         wandb.config.update(args)
-        
     
-    model = modelutils.get_llama(args.model, args.hf_token)
+    model = modelutils.get_llama(args.model, args.hf_token, args.replace_QuantizedLinear)
     model.eval()
     
     # Extract Scale

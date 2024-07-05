@@ -20,13 +20,18 @@ def model_configs():
     data.max_seq_length = 128 #2048
     data.trust_remote_code = True
     data.preprocessing_num_workers = 8
+    data.seed = 11
 
 
     ### MODEL CHECKPOINT ###
     config.model_type = 'Auto'
-    # config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
-    config.model_name_or_path = '/home/LLM_compression/QUIK/weights/llama_with_noise2bit_fp_sft_transformers_bitnoise_block0/checkpoint-800'
-    # config.model_name_or_path = '/home/projects/Quantization/weights_study/weights/llama-2-7b-wrand-4bit-each-iter'
+    config.model_name_or_path = '/home/LLaMA/huggingface/Llama-2-7b-hf'
+    # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama7b_mixed_weight'
+    # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama7b_3bit_loaded'
+    # config.model_name_or_path = '/home/Quantization/weights_study/weights/llama_quik3bit_transformers_sft_mixture_only_fp_quant_split_weight/checkpoint-200'
+    # config.model_name_or_path = '/home/LLM_compression/QUIK/weights/llama7b_3bit_128fp_quant_scales'
+    # config.model_name_or_path = '/home/exp_results/output/instruct/llama7b_test_outliers/checkpoint-2'
+    # config.model_name_or_path = '/home/Quantization/weights_study/weights/checkpoint-600'
     config.model_config_name = None
     config.tokenizer_name = None
     config.token = None
@@ -36,14 +41,14 @@ def model_configs():
 
     ## SAVING DIRS ###
     # config.cache_dir = None
-    config.output_dir = '/home/exp_results/output/instruct/llama7b_test_noise'
+    config.output_dir = '/home/exp_results/output/instruct/llama7b_test_outliers'
 
     ### TRAINING ###
-    config.run_name = 'linearquant_4bit'
+    config.run_name = 'linearquant_3bit'
     config.resume_from_checkpoint = None
     # config.num_train_epochs = None
     config.max_steps = 2
-    config.learning_rate = 1e-4
+    config.learning_rate = 1e-2
     config.weight_decay = 0.0
     config.lr_scheduler_type = 'linear'
     config.warmup_ratio =  0.03
@@ -87,6 +92,20 @@ def model_configs():
         'training_mode': 'train_outlier' #train_full, train_outlier, train_quant
     }
 
+    ### Load Quantized Weight After Quik
+    config.loading_quik_quant_weight = {
+        'load_weight': False,
+        'path_to_quant_params': '/home/LLM_compression/QUIK/weights/llama7b_3bit_128fp_quant_scales/quant_params.pt',
+        'learnable_scale': False
+    }
+
+    ### SymQuant
+    config.SymQuant = {
+        'is_quant_weight': False,
+        'learnable_scale': False,
+        'layer_bits': {'q': 3, 'k': 3, 'v': 3, 'o': 3, 'down': 3, 'gate': 3, 'up': 3}
+    }
+
     ### NoiseQuant
     config.NoiseQuant = {
         'add_quant_noise': False,
@@ -99,9 +118,10 @@ def model_configs():
     ### BitNoiseQuant
     config.BitNoiseQuant = {
         'add_quant_noise': True,
-        'predict': True,
-        'block_size': 128,
+        'predict': False,
         'compute_scale': True,
+        'learnable_scale': False,
+        'noise_type': 'normal',
         'layer_bits': {'q': 2, 'k': 2, 'v': 2, 'o': 2, 'down': 2, 'gate': 2, 'up': 2}
     }
 

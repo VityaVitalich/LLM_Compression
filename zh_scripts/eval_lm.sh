@@ -9,17 +9,17 @@
 #SBATCH --mail-user=V.Moskvoretskii@skoltech.ru
 
 #SBATCH --output=zh_logs/eval_lm.txt
-#SBATCH --time=0-04
+#SBATCH --time=0-05
 
-#SBATCH --mem=16G
+#SBATCH --mem=128G
 
 #SBATCH --nodes=1
 
 #SBATCH -c 8
 
-#SBATCH --gpus=2
+#SBATCH --gpus=1
 
-srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trinity/home/v.moskvoretskii/images/compression.sif bash -c '
+srun singularity exec --bind /trinity/home/v.moskvoretskii/:/home -f --nv /trinity/home/v.moskvoretskii/images/glm.sif bash -c '
     ls;
     cd /home;
     ls;

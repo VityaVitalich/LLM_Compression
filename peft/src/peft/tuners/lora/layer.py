@@ -21,6 +21,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from transformers.pytorch_utils import Conv1D
+#from transformers.models.llama.modeling_llama import QuantizedLinear
 
 from peft.tuners.tuners_utils import BaseTunerLayer
 from peft.utils.other import transpose
@@ -54,6 +55,13 @@ class LoraLayer(BaseTunerLayer):
         base_layer = self.get_base_layer()
         if isinstance(base_layer, nn.Linear):
             in_features, out_features = base_layer.in_features, base_layer.out_features
+        elif isinstance(base_layer, QuantizedLinear):
+            if base_layer.outlier_cols_num == 0:
+                in_features, out_features = base_layer.in_features, base_layer.out_features
+            elif base_layer.outlier_cols_num > 0:
+                in_features, out_features = base_layer.q_in_features, base_layer.out_features
+                self.quant_mask = base_layer.mask
+
         elif isinstance(base_layer, nn.Conv2d):
             in_features, out_features = base_layer.in_channels, base_layer.out_channels
         elif isinstance(base_layer, nn.Embedding):
@@ -86,6 +94,17 @@ class LoraLayer(BaseTunerLayer):
             )
         else:
             self.add_quant_noize = False
+        
+        if self.kwargs.get("quant_mask_config"):
+            quant_mask_config = self.kwargs["quant_mask_config"]
+            self.add_quant_mask = quant_mask_config["add_quant_mask"]
+            self.outlier_cols_num = quant_mask_config["outlier_cols_num"]
+            self.path_to_outlier_ids = quant_mask_config["path_to_outlier_ids"]
+            self.quant_mask = nn.ParameterDict({})
+            
+            # self.base_layer.weight.requires_grad = True
+
+
 
     def get_outliers_mask(self, weight, outlier_fraction):
         with torch.no_grad():
@@ -136,6 +155,14 @@ class LoraLayer(BaseTunerLayer):
         range_params = range_params.detach()
         return range_params
 
+    def get_quant_mask(self, adapter_name):
+        self.quant_mask[adapter_name] = torch.ones(self.in_features, 
+                                                   dtype=torch.bool)
+        # self.path_to_outlier_ids
+        
+
+
+
     def update_layer(self, adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora):
         # This code works for linear layers, override for other layer types
         if r <= 0:
@@ -161,6 +188,10 @@ class LoraLayer(BaseTunerLayer):
             self.loftq_init(adapter_name)
         elif init_lora_weights:
             self.reset_lora_parameters(adapter_name, init_lora_weights)
+
+        if self.kwargs.get("quant_mask_config"):
+            if self.add_quant_mask:
+                self.get_mask(adapter_name)
 
         # check weight and qweight (for GPTQ)
         for weight_name in ("weight", "qweight"):
@@ -379,18 +410,22 @@ class Linear(nn.Module, LoraLayer):
                 lora_B = self.lora_B[active_adapter]                
                 dropout = self.lora_dropout[active_adapter]
                 scaling = self.scaling[active_adapter]
-                x = x.to(lora_A.weight.dtype)
+                
+                if x.dtype != lora_A.weight.dtype:
+                    x = x.to(lora_A.weight.dtype)
+                if hasattr(self, "quant_mask"):
+                    x = x[:, :, self.quant_mask]
                 result += lora_B(lora_A(dropout(x))) * scaling
 
-                if self.add_quant_noize:
-                    device = lora_A.weight.device
-                    weight_randn = self.quant_noise(
-                        self.base_layer, 
-                        self.quant_range_params, 
-                        self.quant_bit, 
-                        device
-                    )
-                    result += F.linear(x, weight_randn)
+                # if self.add_quant_noize:
+                #     device = lora_A.weight.device
+                #     weight_randn = self.quant_noise(
+                #         self.base_layer, 
+                #         self.quant_range_params, 
+                #         self.quant_bit, 
+                #         device
+                #     )
+                #     result += F.linear(x, weight_randn)
 
         result = result.to(previous_dtype)
         return result
@@ -796,6 +831,15 @@ def dispatch_default(
         kwargs.update(lora_config.loftq_config)
         new_module = Conv2d(target, adapter_name, **kwargs)
     elif isinstance(target_base_layer, torch.nn.Linear):
+        if kwargs["fan_in_fan_out"]:
+            warnings.warn(
+                "fan_in_fan_out is set to True but the target module is `torch.nn.Linear`. "
+                "Setting fan_in_fan_out to False."
+            )
+            kwargs["fan_in_fan_out"] = lora_config.fan_in_fan_out = False
+        kwargs.update(lora_config.loftq_config)
+        new_module = Linear(target, adapter_name, **kwargs)
+    elif isinstance(target_base_layer, QuantizedLinear):
         if kwargs["fan_in_fan_out"]:
             warnings.warn(
                 "fan_in_fan_out is set to True but the target module is `torch.nn.Linear`. "

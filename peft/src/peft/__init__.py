@@ -73,6 +73,8 @@ from .tuners import (
     OFTModel,
     PolyConfig,
     PolyModel,
+    SASUTConfig,
+    SASUTModel
 )
 from .utils import (
     TRANSFORMERS_MODELS_TO_PREFIX_TUNING_POSTPROCESS_MAPPING,

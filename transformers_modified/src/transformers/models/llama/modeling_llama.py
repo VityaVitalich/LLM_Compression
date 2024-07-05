@@ -1221,9 +1221,6 @@ class LlamaDecoderLayer(nn.Module):
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
             )
 
-        if self.STE and self.training and (not self.learnable_scales):
-            self.quantize()
-
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
