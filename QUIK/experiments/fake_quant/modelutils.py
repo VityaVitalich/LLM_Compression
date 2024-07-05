@@ -64,6 +64,17 @@ def get_llama(model, hf_token, replace_QuantizedLinear):
 
     return model
 
+def get_glm(model, hf_token, **kwargs):
+    print('loading model')
+    model = transformers.AutoModelForSeq2SeqLM.from_pretrained(model, torch_dtype=torch.bfloat16, 
+                                                          use_auth_token=hf_token,
+                                                          trust_remote_code=True
+                                                         # low_cpu_mem_usage=True
+                                                          )
+    print('loaded')
+
+    return model
+
 
 
 @torch.no_grad()

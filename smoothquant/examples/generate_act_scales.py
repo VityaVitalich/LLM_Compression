@@ -5,6 +5,7 @@ import os
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    AutoModelForSeq2SeqLM
 )
 import argparse
 
@@ -56,9 +57,12 @@ def get_act_scales(model, tokenizer, dataset_path, num_samples=512, seq_len=512)
     return act_scales
 
 def build_model_and_tokenizer(model_name):
-    tokenizer = AutoTokenizer.from_pretrained(model_name, model_max_length=512)
-    kwargs = {"torch_dtype": torch.float16, "device_map": "sequential"}
-    model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, model_max_length=512, trust_remote_code=True)
+    if 'glm' in model_name:
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name, torch_dtype=torch.float16, trust_remote_code=True).to('cuda')
+    else:
+        kwargs = {"torch_dtype": torch.float16, "device_map": "sequential"}
+        model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
     return model, tokenizer
 
 
