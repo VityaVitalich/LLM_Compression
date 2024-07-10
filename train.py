@@ -14,7 +14,8 @@ from ste_utils import prepare_llama_ste, prepare_scales_quik
 from collators import (
     DataCollatorWithMaskForCausalLM,
     DistillDataCollatorWithMaskForCausalLM,
-    DistillDataCollatorSeq2Seq
+    DistillDataCollatorSeq2Seq,
+    GLMlDataCollator
 )
 from distill_trainer import DistillTrainer
 from data_utils import (
@@ -23,6 +24,7 @@ from data_utils import (
     format_datasets,
     tokenize_datasets,
     load_hf_datasets,
+    encode_with_messages_format_glm
 )
 
 # import transformers
@@ -32,6 +34,7 @@ from transformers_modified.src.transformers import (
     Trainer,
     TrainingArguments,
     DataCollatorForSeq2Seq,
+    AutoModelForSeq2SeqLM
 )
 import transformers_modified.src.transformers as transformers
 
@@ -205,13 +208,23 @@ def run_train(
     # else:
     #     model_type = AutoModelForCausalLM
     print(model_args.token)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        torch_dtype=torch.bfloat16,
-        token=model_args.token,
-        cache_dir=model_args.cache_dir,
-        device_map="auto",
-    )
+    if config.glm:
+        model = AutoModelForSeq2SeqLM.from_pretrained(
+            model_args.model_name_or_path,
+            torch_dtype=torch.bfloat16,
+            token=model_args.token,
+            cache_dir=model_args.cache_dir,
+            trust_remote_code=True
+        ).to('cuda')
+    else:
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_args.model_name_or_path,
+            torch_dtype=torch.bfloat16,
+            token=model_args.token,
+            cache_dir=model_args.cache_dir,
+            device_map="auto",
+        )
 
     if config.zero_outliers:
         make_zero_outliers(model, config.outlier_fraction)
@@ -304,11 +317,12 @@ def run_train(
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
-    embedding_size = model.get_input_embeddings().weight.shape[0]
-    if len(tokenizer) > embedding_size:
-        model.resize_token_embeddings(len(tokenizer))
+    if not config.glm:
+        embedding_size = model.get_input_embeddings().weight.shape[0]
+        if len(tokenizer) > embedding_size:
+            model.resize_token_embeddings(len(tokenizer))
 
-    print(len(tokenizer), embedding_size)
+        print(len(tokenizer), embedding_size)
 
     # Load and preprocessing dataset
     raw_datasets = load_hf_datasets(data_args)
@@ -328,7 +342,7 @@ def run_train(
                 )
             elif "messages" in raw_datasets["train"].column_names:
                 encode_function = partial(
-                    encode_with_messages_format,
+                    encode_with_messages_format if not config.glm else encode_with_messages_format_glm,
                     tokenizer=tokenizer,
                     max_seq_length=data_args.block_size,
                 )
@@ -340,7 +354,7 @@ def run_train(
                 remove_columns=[
                     name
                     for name in raw_datasets["train"].column_names
-                    if name not in ["input_ids", "labels", "attention_mask"]
+                    if name not in ["input_ids", "labels", "attention_mask", "position_ids"]
                 ],
                 desc="Tokenizing and reformatting instruction data",
             )
@@ -350,9 +364,12 @@ def run_train(
                 lambda example: (example["labels"] != -100).any()
             )
 
-            data_collator = DataCollatorForSeq2Seq(
-                tokenizer=tokenizer, model=model, padding="longest"
-            )
+            if config.glm:
+                data_collator = GLMlDataCollator(tokenizer=tokenizer)
+            else:
+                data_collator = DataCollatorForSeq2Seq(
+                    tokenizer=tokenizer, model=model, padding="longest"
+                )
         else:
             tokenized_datasets = tokenize_datasets(data_args, raw_datasets, tokenizer)
             lm_datasets = format_datasets(data_args, tokenized_datasets, tokenizer)

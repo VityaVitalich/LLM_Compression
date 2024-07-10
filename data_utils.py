@@ -192,3 +192,35 @@ def encode_with_messages_format(example, tokenizer, max_seq_length):
         'labels': labels.flatten(),
         'attention_mask': attention_mask.flatten(),
     }
+
+def encode_with_messages_format_glm(example, tokenizer, max_seq_length):
+    '''
+    Here we assume each example has a 'messages' field Each message is a dict with 'role' and 'content' fields.
+    We concatenate all messages with the roles as delimiters and tokenize them together.
+    '''
+    messages = example['messages']
+    if len(messages) == 0:
+        raise ValueError('messages field is empty.')
+
+    message_text = ""
+    labels = []
+    for message in messages:
+        if message["role"] == "system":
+            message_text += "<|system|>\n" + message["content"].strip() + "\n"
+        elif message["role"] == "user":
+            message_text += "<|user|>\n" + message["content"].strip() + "\n"
+        elif message["role"] == "assistant":
+            message_text += "<|assistant|>\n" + tokenizer.mask_token + tokenizer.eos_token + "\n"
+            labels.append(message["content"].strip())
+            break
+        else:
+            raise ValueError("Invalid role: {}".format(message["role"]))
+    
+    inputs = tokenizer(
+                message_text,
+                return_tensors="pt")
+    prompt_len = len(inputs['input_ids'][0])
+    gen_len = max_seq_length - prompt_len
+    inputs = tokenizer.build_inputs_for_generation(inputs, targets=labels, max_gen_length=gen_len, padding=False)
+
+    return inputs

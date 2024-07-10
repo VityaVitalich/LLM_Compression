@@ -15,6 +15,7 @@ def model_configs():
     data.instruct = True
 
     ### MODEL CHECKPOINT ###
+    config.glm = False
     config.model_type = 'Auto'
     config.model_name_or_path = "meta-llama/Llama-2-7b-hf"
     config.model_config_name = None
