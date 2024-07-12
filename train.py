@@ -214,8 +214,9 @@ def run_train(
             torch_dtype=torch.bfloat16,
             token=model_args.token,
             cache_dir=model_args.cache_dir,
-            trust_remote_code=True
-        ).to('cuda')
+            trust_remote_code=True,
+            device_map="auto",
+        )
     else:
 
         model = AutoModelForCausalLM.from_pretrained(
