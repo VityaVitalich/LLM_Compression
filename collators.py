@@ -134,7 +134,6 @@ class GLMlDataCollator(object):
                                                                     attention_mask=torch.tensor(item_dict["attention_mask"]), 
                                                                     max_seq_length=length_to_pad)
             
-            print(cur_attention_masks.size(), cur_position_ids.size())
             input_ids.append(cur_input_ids)
             attention_masks.append(cur_attention_masks)
             label = torch.tensor(item_dict["labels"]).squeeze(0)
