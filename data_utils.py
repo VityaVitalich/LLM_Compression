@@ -218,9 +218,52 @@ def encode_with_messages_format_glm(example, tokenizer, max_seq_length):
     
     inputs = tokenizer(
                 message_text,
-                return_tensors="pt")
+                return_tensors="pt",
+                max_length=max_seq_length,
+                truncation=True
+                )
     prompt_len = len(inputs['input_ids'][0])
     gen_len = max_seq_length - prompt_len
     inputs = tokenizer.build_inputs_for_generation(inputs, targets=labels, max_gen_length=gen_len, padding=False)
 
     return inputs
+
+
+def process_glm4_batch(
+        batch,
+        tokenizer,
+        max_input_length: int,
+        max_output_length: int,
+) -> dict[str, list]:
+    batched_conv = batch['messages']
+    batched_input_ids = []
+    batched_labels = []
+
+    for conv in batched_conv:
+        input_ids = [151331, 151333]
+        loss_masks = [False, False]
+        for message in conv:
+            #print(message)
+            #message = process_message(message)
+            loss_mask_val = False if message['role'] in ('system', 'user', 'observation') else True
+            #print(message)
+            new_input_ids = tokenizer.apply_chat_template([message], tokenize=True, return_dict=False)[0][2:]
+            #print(new_input_ids)
+            new_loss_masks = [loss_mask_val] * len(new_input_ids)
+            input_ids += new_input_ids
+            loss_masks += new_loss_masks
+        input_ids.append(151336)  # EOS for chat
+        loss_masks = [False, *loss_masks]
+        labels = []
+        for input_id, mask in zip(input_ids, loss_masks):
+            if mask:
+                labels.append(input_id)
+            else:
+                labels.append(-100)
+        max_length = max_input_length + max_output_length + 1
+        batched_input_ids.append(input_ids[:max_length])
+        batched_labels.append(labels[:max_length])
+    del batched_conv, conv, input_ids, loss_masks, message, new_input_ids, new_loss_masks, labels, input_id, mask
+    torch.cuda.empty_cache()
+
+    return {'input_ids': batched_input_ids, 'labels': batched_labels}

@@ -1,3 +1,4 @@
+from transformers import DataCollatorForSeq2Seq
 import transformers
 import torch
 from dataclasses import dataclass
@@ -158,3 +159,28 @@ class GLMlDataCollator(object):
         if labels is not None:
             data_dict["labels"] = labels
         return data_dict
+
+
+class GLM4Collator(DataCollatorForSeq2Seq):
+    def __call__(self, features, return_tensors=None):
+        output_ids = ([feature['output_ids'] for feature in features] if 'output_ids' in features[0].keys() else None)
+        if output_ids is not None:
+            max_output_length = max(len(out) for out in output_ids)
+            if self.pad_to_multiple_of is not None:
+                max_output_length = (
+                        (
+                                max_output_length + self.pad_to_multiple_of - 1) //
+                        self.pad_to_multiple_of * self.pad_to_multiple_of
+                )
+            for feature in features:
+                remainder = [self.tokenizer.pad_token_id] * (
+                        max_output_length - len(feature['output_ids'])
+                )
+                if isinstance(feature['output_ids'], list):
+                    feature['output_ids'] = feature['output_ids'] + remainder
+                else:
+                    feature['output_ids'] = np.concatenate(
+                        [feature['output_ids'], remainder]
+                    ).astype(np.int64)
+
+        return super().__call__(features, return_tensors)

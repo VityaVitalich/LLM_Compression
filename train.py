@@ -15,7 +15,8 @@ from collators import (
     DataCollatorWithMaskForCausalLM,
     DistillDataCollatorWithMaskForCausalLM,
     DistillDataCollatorSeq2Seq,
-    GLMlDataCollator
+    GLMlDataCollator,
+    GLM4Collator
 )
 from distill_trainer import DistillTrainer
 from data_utils import (
@@ -24,7 +25,8 @@ from data_utils import (
     format_datasets,
     tokenize_datasets,
     load_hf_datasets,
-    encode_with_messages_format_glm
+    encode_with_messages_format_glm,
+    process_glm4_batch
 )
 
 # import transformers
@@ -214,10 +216,13 @@ def run_train(
             torch_dtype=torch.bfloat16,
             token=model_args.token,
             cache_dir=model_args.cache_dir,
-            trust_remote_code=True
-        ).to('cuda')
+            trust_remote_code=True,
+            device_map='auto'
+        )
+        if config.version == 4:
+            model.gradient_checkpointing_enable()
+            model.enable_input_require_grads()
     else:
-
         model = AutoModelForCausalLM.from_pretrained(
             model_args.model_name_or_path,
             torch_dtype=torch.bfloat16,
@@ -347,17 +352,35 @@ def run_train(
                     max_seq_length=data_args.block_size,
                 )
 
-            lm_datasets = raw_datasets.map(
-                encode_function,
-                batched=False,
-                num_proc=data_args.preprocessing_num_workers,
-                remove_columns=[
-                    name
-                    for name in raw_datasets["train"].column_names
-                    if name not in ["input_ids", "labels", "attention_mask", "position_ids"]
-                ],
-                desc="Tokenizing and reformatting instruction data",
-            )
+            if config.glm and config.version == 4:
+                lm_datasets = raw_datasets.map(
+                    functools.partial(
+                        process_glm4_batch,
+                        tokenizer=tokenizer,
+                        max_input_length=data_args.block_size,
+                        max_output_length=data_args.block_size,
+                    ),
+                    batched=True,
+                    num_proc=data_args.preprocessing_num_workers,
+                    remove_columns=[
+                        name
+                        for name in raw_datasets["train"].column_names
+                        if name not in ["input_ids", "labels", "attention_mask", "position_ids"]
+                    ],
+                    desc="Tokenizing and reformatting instruction data",
+                )
+            else:
+                lm_datasets = raw_datasets.map(
+                    encode_function,
+                    batched=False,
+                    num_proc=data_args.preprocessing_num_workers,
+                    remove_columns=[
+                        name
+                        for name in raw_datasets["train"].column_names
+                        if name not in ["input_ids", "labels", "attention_mask", "position_ids"]
+                    ],
+                    desc="Tokenizing and reformatting instruction data",
+                )
 
             lm_datasets.set_format(type="pt")
             lm_datasets = lm_datasets.filter(
@@ -365,7 +388,10 @@ def run_train(
             )
 
             if config.glm:
-                data_collator = GLMlDataCollator(tokenizer=tokenizer)
+                if config.version == 4:
+                    data_collator = GLM4Collator(tokenizer=tokenizer, padding='longest', return_tensors='pt',)
+                else:
+                    data_collator = GLMlDataCollator(tokenizer=tokenizer)
             else:
                 data_collator = DataCollatorForSeq2Seq(
                     tokenizer=tokenizer, model=model, padding="longest"

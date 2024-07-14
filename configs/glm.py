@@ -16,6 +16,7 @@ def model_configs():
 
     ### MODEL CHECKPOINT ###
     config.glm = True
+    config.version = 4
     config.model_type = 'Auto'
     config.model_name_or_path = "THUDM/glm-10b"
     config.model_config_name = None
