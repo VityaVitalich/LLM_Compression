@@ -280,7 +280,8 @@ def run_train(
             path_to_act_scales=config.sasut_path_to_act_scales,
             noise_type=config.sasut_noise_type,
             target_modules=config.sasut_target_modules,
-            compute_quant_scale=config.sasut_compute_quant_scale
+            compute_quant_scale=config.sasut_compute_quant_scale,
+            add_noise=config.sasut_add_noise,
         )
         model = get_peft_model(model, sasut_config)
     # Load pretrained tokenizer

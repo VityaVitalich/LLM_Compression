@@ -7,10 +7,10 @@ def model_configs():
 
     ### DATASET ###
     data = config.data = ml_collections.ConfigDict()
-    data.dataset_name = "allenai/tulu-v2-sft-mixture"
+    data.dataset_name = "VityaVitalich/LIMA"
     data.dataset_config_name =None #'wikitext-2-raw-v1'
     data.valid_split = 5
-    data.block_size = 2048
+    data.block_size = 512
     data.dataset_percentage = 100
     data.instruct = True
 
@@ -18,7 +18,7 @@ def model_configs():
     config.glm = False
     config.version = 4
     config.model_type = 'Auto'
-    config.model_name_or_path = "meta-llama/Llama-2-7b-hf"
+    config.model_name_or_path = "facebook/opt-1.3b"
     config.model_config_name = None
     config.tokenizer_name = None
     config.token = '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'
@@ -33,18 +33,18 @@ def model_configs():
     config.weight_decay = 0
     config.seed = 11
     config.num_train_epochs = 1
-    config.max_steps = 1000 # set to -1 when not used
+    config.max_steps = 10 # set to -1 when not used
     config.per_device_train_batch_size = 2
     config.per_device_eval_batch_size = 2
     config.gradient_accumulation_steps = 16
     config.gradient_checkpointing = False
-    config.report_to = 'wandb'
+    config.report_to = 'none'
     config.run_name = 'Llama7b_sasut_test'
     ### eval ###
-    config.evaluation_strategy = 'steps'
+    config.evaluation_strategy = 'no'
     config.eval_steps = 250
     ### save ###
-    config.save_strategy = 'steps'
+    config.save_strategy = 'no'
     config.save_steps = 250
 
 
@@ -63,11 +63,12 @@ def model_configs():
 
     ### OUTLIER TUNING = SASUT ###
     config.use_sasut = True
-    config.sasut_path_to_act_scales = '/home/LLM_Compression/QUIK/experiments/act_scales/llama7b_owq_w4_ptb_max.pt'
+    config.sasut_path_to_act_scales = '/home/LLM_Compression/QUIK/experiments/act_scales/opt-1.3b.pt'
     config.sasut_outlier_num = 128
-    config.sasut_target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"]
+    config.sasut_target_modules = ["q_proj"]
     config.sasut_noise_type = 'normal'
     config.sasut_compute_quant_scale = True
+    config.sasut_add_noise = False
 
     ### NORM TWEEKING ###
     config.norm_tweek = False

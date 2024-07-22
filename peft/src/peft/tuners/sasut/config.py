@@ -45,6 +45,7 @@ class SASUTConfig(PeftConfig):
         },
     )
     path_to_act_scales: str = field(default='./act_scales.pt', metadata={"help": "Activation Scales"})
+    add_noise: bool = field(default=True, metadata={"help": "Whether to add noise to non-salient weights"})
     noise_type: str = field(
         default='normal',
         metadata={

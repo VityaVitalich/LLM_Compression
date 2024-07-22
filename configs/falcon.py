@@ -68,6 +68,8 @@ def model_configs():
     config.sasut_target_modules = ["query_key_value", "dense", "dense_h_to_4h", "dense_4h_to_h"]
     config.sasut_noise_type = 'normal'
     config.sasut_compute_quant_scale = True
+    config.sasut_add_noise = False
+
 
     ### NORM TWEEKING ###
     config.norm_tweek = False
