@@ -355,7 +355,7 @@ def run_train(
 
             if config.glm and config.version == 4:
                 lm_datasets = raw_datasets.map(
-                    functools.partial(
+                    partial(
                         process_glm4_batch,
                         tokenizer=tokenizer,
                         max_input_length=data_args.block_size,
