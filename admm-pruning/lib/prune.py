@@ -256,8 +256,9 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
 def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
     ## SparseGPT code available at: https://github.com/IST-DASLab/sparsegpt/tree/f5c25005a61f96a0933ca2f95705a963585aafaa
     print('Starting ...')
-    dataloader, _ = get_loaders("c4",nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
-
+    # dataloader, _ = get_loaders("c4",nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
+    dataloader, _ = get_loaders('wikitext2',nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
+    
     use_cache = model.config.use_cache
     model.config.use_cache = False
     layers = model.model.layers
@@ -325,8 +326,12 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
 
         for name in gpts:
             print(i, name, datetime.now())
-
+            w = gpts[name].layer.weight.data
+            L, R = low_rank_decomposition(w, rank_ratio=0.25)
+            S = w - L @ R
+            gpts[name].layer.weight.data = S
             gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+            gpts[name].layer.weight.data += L @ R
             gpts[name].free()
 
         for j in range(args.nsamples):
