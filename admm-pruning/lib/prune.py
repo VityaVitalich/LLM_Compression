@@ -11,6 +11,39 @@ from .ablate import AblateGPT
 
 from datetime import datetime
 
+def low_rank_decomposition(weight, rank_ratio, remove_criteria='max_eigenvalue'):
+    out_features, in_features = weight.shape
+
+    w_dtype = weight.dtype
+    U, S, Vh = torch.linalg.svd(weight.float(), full_matrices=False)
+    rank = torch.count_nonzero(S)
+    is_full_rank = rank == min(out_features, in_features)
+
+    # reduced_rank = np.round(parameter_ratio * \
+    #                         (out_features * in_features) / (out_features + in_features))
+    reduced_rank = torch.ceil(rank * rank_ratio)
+    reduced_rank = int(reduced_rank)
+
+    # L = U @ (torch.sqrt(torch.diag(S)[:, 0:reduced_rank]))
+    # R = torch.sqrt(torch.diag(S)[0:reduced_rank, :]) @ Vh
+
+    
+
+    if remove_criteria == 'max_eigenvalue':
+        L = U @ (torch.sqrt(torch.diag(S)[:, 0:reduced_rank]))
+        R = torch.sqrt(torch.diag(S)[0:reduced_rank, :]) @ Vh
+
+    elif remove_criteria == 'min_eigenvalue':
+        len_s = len(S)
+        L = U @ (torch.sqrt(torch.diag(S)[:, len_s - reduced_rank:]))
+        R = torch.sqrt(torch.diag(S)[len_s - reduced_rank:, :]) @ Vh
+
+    L = L.to(dtype=w_dtype)
+    R = R.to(dtype=w_dtype)
+
+    return L, R
+
+
 def find_layers(module, layers=[nn.Linear], name=''):
     """
     Recursively find the layers of a certain type in a module.
@@ -58,7 +91,7 @@ def check_sparsity(model):
     model.config.use_cache = use_cache 
     return float(count)/total_params 
 
-def prepare_calibration_input(model, dataloader, device):
+def prepare_calibration_input(model, dataloader, device, args=None):
     use_cache = model.config.use_cache
     model.config.use_cache = False
     layers = model.model.layers
@@ -68,7 +101,7 @@ def prepare_calibration_input(model, dataloader, device):
         device = model.hf_device_map["model.embed_tokens"]
 
     dtype = next(iter(model.parameters())).dtype
-    inps = torch.zeros((128, model.seqlen, model.config.hidden_size), dtype=dtype, device=device)
+    inps = torch.zeros((args.nsamples, model.seqlen, model.config.hidden_size), dtype=dtype, device=device)
     inps.requires_grad = False
     cache = {'i': 0, 'attention_mask': None, "position_ids": None}
 
@@ -132,10 +165,11 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
     model.config.use_cache = False 
 
     print("loading calibdation data")
-    dataloader, _ = get_loaders("c4",nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
+    # dataloader, _ = get_loaders("c4",nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
+    dataloader, _ = get_loaders('wikitext2',nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
     print("dataset loading complete")
     with torch.no_grad():
-        inps, outs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, device)
+        inps, outs, attention_mask, position_ids = prepare_calibration_input(model, dataloader, device, args)
 
     layers = model.model.layers
     for i in range(len(layers)):
@@ -167,6 +201,9 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
         for name in subset:
             print(f"pruning layer {i} name {name}", datetime.now())
             W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1,-1)))
+            # L, R = low_rank_decomposition(subset[name].weight.data, rank_ratio=0.25)
+            # S = subset[name].weight.data - L @ R
+            # W_metric = torch.abs(S) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1,-1)))
 
             W_mask = (torch.zeros_like(W_metric) == 1)  ## initialize a mask to be all False
             if prune_n != 0:
@@ -202,7 +239,9 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
                     indices = sort_res[1][:,:int(W_metric.shape[1]*args.sparsity_ratio)]
                     W_mask.scatter_(1, indices, True)
 
-            subset[name].weight.data[W_mask] = 0  ## set weights to zero 
+            subset[name].weight.data[W_mask] = 0  ## set weights to zero
+            # S[W_mask] = 0
+            # subset[name].weight.data = S + L @ R 
 
         for j in range(args.nsamples):
             with torch.no_grad():
@@ -403,7 +442,7 @@ def prune_ablate(args, model, tokenizer, dev, prune_n=0, prune_m=0):
 def prune_admm(args, model, tokenizer, dev, prune_n=0, prune_m=0):
     ## SparseGPT code available at: https://github.com/IST-DASLab/sparsegpt/tree/f5c25005a61f96a0933ca2f95705a963585aafaa
     print('Starting ...')
-    dataloader, _ = get_loaders("c4",nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
+    dataloader, _ = get_loaders('wikitext2',nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
 
     use_cache = model.config.use_cache
     model.config.use_cache = False
@@ -416,6 +455,8 @@ def prune_admm(args, model, tokenizer, dev, prune_n=0, prune_m=0):
     inps = torch.zeros(
         (args.nsamples, model.seqlen, model.config.hidden_size), dtype=dtype, device=dev
     )
+    print("Shape of inps")
+    print(inps.shape)
     cache = {'i': 0, 'attention_mask': None, "position_ids": None}
 
     class Catcher(nn.Module):
@@ -472,7 +513,6 @@ def prune_admm(args, model, tokenizer, dev, prune_n=0, prune_m=0):
 
         for name in gpts:
             print(i, name, datetime.now())
-
             gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.1)
             gpts[name].free()
 
