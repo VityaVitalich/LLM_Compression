@@ -24,6 +24,8 @@ class SparseGPT:
         self.H = torch.zeros((self.columns, self.columns), device=self.dev)
         self.nsamples = 0
 
+        self.scales = None
+
     def add_batch(self, inp, out):
         if len(inp.shape) == 2:
             inp = inp.unsqueeze(0)
@@ -40,12 +42,26 @@ class SparseGPT:
     def fasterprune(
         self, sparsity, prune_n=0, prune_m=0, blocksize=128, percdamp=.01
     ):
+
         W = self.layer.weight.data.clone()
         if isinstance(self.layer, nn.Conv2d):
             W = W.flatten(1)
         if isinstance(self.layer, transformers.Conv1D):
             W = W.t()
         W = W.float()
+
+        if self.scales is not None:
+            col_perm = self.scales.sort(descending=True)[1]
+            inv_col_perm = torch.zeros(col_perm.numel(), 
+                                       dtype=col_perm.dtype)
+            inv_col_perm[col_perm] = torch.arange(col_perm.numel(),
+                                                  dtype=col_perm.dtype)
+            W = W[:, col_perm]
+            self.H = self.H[col_perm, :][:, col_perm]
+            n_outliers = blocksize
+
+        else:
+            n_outliers = 0
 
         tick = time.time()
 
@@ -67,7 +83,7 @@ class SparseGPT:
 
         mask = None
 
-        for i1 in range(0, self.columns, blocksize):
+        for i1 in range(n_outliers, self.columns, blocksize):
             i2 = min(i1 + blocksize, self.columns)
             count = i2 - i1
 
@@ -109,6 +125,9 @@ class SparseGPT:
             Losses += torch.sum(Losses1, 1) / 2
 
             W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
+
+        if self.scales is not None:
+            W = W[:, inv_col_perm]
 
         torch.cuda.synchronize()
         if isinstance(self.layer, transformers.Conv1D):

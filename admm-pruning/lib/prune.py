@@ -200,10 +200,10 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
 
         for name in subset:
             print(f"pruning layer {i} name {name}", datetime.now())
-            W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1,-1)))
-            # L, R = low_rank_decomposition(subset[name].weight.data, rank_ratio=0.25)
-            # S = subset[name].weight.data - L @ R
-            # W_metric = torch.abs(S) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1,-1)))
+            # W_metric = torch.abs(subset[name].weight.data) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1,-1)))
+            L, R = low_rank_decomposition(subset[name].weight.data, rank_ratio=0.125)
+            S = subset[name].weight.data - L @ R
+            W_metric = torch.abs(S) * torch.sqrt(wrapped_layers[name].scaler_row.reshape((1,-1)))
 
             W_mask = (torch.zeros_like(W_metric) == 1)  ## initialize a mask to be all False
             if prune_n != 0:
@@ -239,9 +239,9 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
                     indices = sort_res[1][:,:int(W_metric.shape[1]*args.sparsity_ratio)]
                     W_mask.scatter_(1, indices, True)
 
-            subset[name].weight.data[W_mask] = 0  ## set weights to zero
-            # S[W_mask] = 0
-            # subset[name].weight.data = S + L @ R 
+            # subset[name].weight.data[W_mask] = 0  ## set weights to zero
+            S[W_mask] = 0
+            subset[name].weight.data = S + L @ R 
 
         for j in range(args.nsamples):
             with torch.no_grad():
@@ -258,7 +258,8 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
     print('Starting ...')
     # dataloader, _ = get_loaders("c4",nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
     dataloader, _ = get_loaders('wikitext2',nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
-    
+    act_scales = torch.load("/home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt")
+
     use_cache = model.config.use_cache
     model.config.use_cache = False
     layers = model.model.layers
@@ -326,12 +327,28 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
 
         for name in gpts:
             print(i, name, datetime.now())
-            w = gpts[name].layer.weight.data
-            L, R = low_rank_decomposition(w, rank_ratio=0.25)
-            S = w - L @ R
-            gpts[name].layer.weight.data = S
+
+            # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+            # gpts[name].free()
+           
+            # w = gpts[name].layer.weight.data
+            # L, R = low_rank_decomposition(w, rank_ratio=0.125)
+            # S = w - L @ R
+            # gpts[name].layer.weight.data = S
+            # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+            # gpts[name].layer.weight.data += L @ R
+            # gpts[name].free()
+
+            # w = gpts[name].layer.weight.data
+            # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+            # S = gpts[name].layer.weight.data
+            # L, R = low_rank_decomposition(w - S, rank_ratio=0.125)
+            # gpts[name].layer.weight.data = S + L @ R
+            # gpts[name].free()
+
+            scales = act_scales[f"model.layers.{i}.{name}"]
+            gpts[name].scales = scales
             gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
-            gpts[name].layer.weight.data += L @ R
             gpts[name].free()
 
         for j in range(args.nsamples):
