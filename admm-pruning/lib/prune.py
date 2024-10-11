@@ -10,6 +10,7 @@ from .data import get_loaders
 from .ablate import AblateGPT 
 
 from datetime import datetime
+from pathlib import Path
 
 def low_rank_decomposition(weight, rank_ratio, remove_criteria='max_eigenvalue'):
     out_features, in_features = weight.shape
@@ -46,7 +47,7 @@ def low_rank_decomposition(weight, rank_ratio, remove_criteria='max_eigenvalue')
 
 def get_outlier_mask(weight, outlier_fraction=0.05):
     with torch.no_grad():
-        w = weight
+        w = weight.clone()
         w_flat = w.view(-1)
         lower_threshold, upper_threshold = (
             torch.kthvalue(
@@ -279,12 +280,14 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
     print('Starting ...')
     # dataloader, _ = get_loaders("c4",nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
     dataloader, _ = get_loaders('wikitext2',nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
-    act_scales = torch.load("/home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt")
+    # act_scales = torch.load("/home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt")
     outlier_cols_num = 128
 
     use_cache = model.config.use_cache
     model.config.use_cache = False
     layers = model.model.layers
+
+    std_dict = {}
 
     if "model.embed_tokens" in model.hf_device_map:
         dev = model.hf_device_map["model.embed_tokens"]
@@ -318,6 +321,8 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
     attention_mask = cache['attention_mask']
     position_ids = cache['position_ids']
 
+    inps_orig, outs_orig = inps.clone(), outs.clone()
+
     print('Ready.')
 
     for i in range(len(layers)):
@@ -326,7 +331,7 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
             dev = model.hf_device_map[f"model.layers.{i}"]
             print(f"layer {i} device {dev}")
             inps, outs, attention_mask, position_ids = inps.to(dev), outs.to(dev), attention_mask.to(dev), position_ids.to(dev)
-
+            inps_orig, outs_orig = inps_orig.to(dev), outs_orig.to(dev)
         subset = find_layers(layer)
 
         gpts = {}
@@ -347,11 +352,14 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
         for h in handles:
             h.remove()
 
+        for j in range(args.nsamples):
+            outs_orig[j] = layer(inps_orig[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]    
+
         for name in gpts:
             print(i, name, datetime.now())
-            w = gpts[name].layer.weight.data
-            scales = act_scales[f"model.layers.{i}.{name}"].to(device=dev, dtype=w.dtype)
-            w_scales = w.abs().max(dim=0)[0]
+            # w = gpts[name].layer.weight.data
+            # scales = act_scales[f"model.layers.{i}.{name}"].to(device=dev, dtype=w.dtype)
+            # w_scales = w.abs().max(dim=0)[0]
             # outlier_cols_inds = scales.sort(descending=True)[1][-outlier_cols_num:]
             # mask = torch.ones_like(scales, dtype=torch.bool)
             # mask[outlier_cols_inds] = False
@@ -359,15 +367,15 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
 
             # outlier_mask = get_outlier_mask(w)
             # S = w * (~outlier_mask)
-            smooth_scale = (scales ** 1/2) / (w_scales ** 1/2)
-            S = w * smooth_scale
+            # smooth_scale = (scales ** 1/2) / (w_scales ** 1/2)
+            # S = w * smooth_scale
 
-            gpts[name].layer.weight.data = S
+            # gpts[name].layer.weight.data = S
             gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
             # gpts[name].layer.weight.data += w * (~mask)
             # gpts[name].layer.weight.data += w * outlier_mask
-            w = gpts[name].layer.weight.data / smooth_scale
-            gpts[name].layer.weight.data = w
+            # w = gpts[name].layer.weight.data / smooth_scale
+            # gpts[name].layer.weight.data = w
             gpts[name].free()
 
             # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
@@ -400,10 +408,21 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
         layers[i] = layer 
         torch.cuda.empty_cache()
 
+        std_between_outs = torch.std(outs_orig - outs)
+        std_dict[i] = std_between_outs.to('cpu')
+
         inps, outs = outs, inps
+        inps_orig, outs_orig = outs_orig, inps_orig
+
+
 
     model.config.use_cache = use_cache
     torch.cuda.empty_cache()
+    file_path = Path(args.save) / 'std_outs_dict.pt'
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(std_dict, file_path)
+
+
 
 
 
