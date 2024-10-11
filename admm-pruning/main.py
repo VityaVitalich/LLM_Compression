@@ -22,7 +22,8 @@ def get_llm(model_name, cache_dir="llm_weights"):
         device_map="auto"
     )
 
-    model.seqlen = model.config.max_position_embeddings 
+    # model.seqlen = model.config.max_position_embeddings
+    model.seqlen = int(model.config.max_position_embeddings // 2)
     return model
 
 def main():

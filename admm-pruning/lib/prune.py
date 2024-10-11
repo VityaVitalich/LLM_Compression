@@ -44,6 +44,27 @@ def low_rank_decomposition(weight, rank_ratio, remove_criteria='max_eigenvalue')
     return L, R
 
 
+def get_outlier_mask(weight, outlier_fraction=0.05):
+    with torch.no_grad():
+        w = weight
+        w_flat = w.view(-1)
+        lower_threshold, upper_threshold = (
+            torch.kthvalue(
+                w_flat.float(),
+                int(w_flat.numel() * outlier_fraction / 2),
+            )[0],
+            torch.kthvalue(
+                w_flat.float(),
+                int(w_flat.numel() * (1 - outlier_fraction / 2)),
+            )[0],
+        )
+
+        outliers = (w < lower_threshold) | (w > upper_threshold)
+
+    outliers_mask = outliers.detach()
+
+    return outliers_mask
+
 def find_layers(module, layers=[nn.Linear], name=''):
     """
     Recursively find the layers of a certain type in a module.
@@ -259,6 +280,7 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
     # dataloader, _ = get_loaders("c4",nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
     dataloader, _ = get_loaders('wikitext2',nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
     act_scales = torch.load("/home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt")
+    outlier_cols_num = 128
 
     use_cache = model.config.use_cache
     model.config.use_cache = False
@@ -327,6 +349,26 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
 
         for name in gpts:
             print(i, name, datetime.now())
+            w = gpts[name].layer.weight.data
+            scales = act_scales[f"model.layers.{i}.{name}"].to(device=dev, dtype=w.dtype)
+            w_scales = w.abs().max(dim=0)[0]
+            # outlier_cols_inds = scales.sort(descending=True)[1][-outlier_cols_num:]
+            # mask = torch.ones_like(scales, dtype=torch.bool)
+            # mask[outlier_cols_inds] = False
+            # S = w * mask
+
+            # outlier_mask = get_outlier_mask(w)
+            # S = w * (~outlier_mask)
+            smooth_scale = (scales ** 1/2) / (w_scales ** 1/2)
+            S = w * smooth_scale
+
+            gpts[name].layer.weight.data = S
+            gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+            # gpts[name].layer.weight.data += w * (~mask)
+            # gpts[name].layer.weight.data += w * outlier_mask
+            w = gpts[name].layer.weight.data / smooth_scale
+            gpts[name].layer.weight.data = w
+            gpts[name].free()
 
             # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
             # gpts[name].free()
@@ -346,10 +388,11 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
             # gpts[name].layer.weight.data = S + L @ R
             # gpts[name].free()
 
-            scales = act_scales[f"model.layers.{i}.{name}"]
-            gpts[name].scales = scales
-            gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
-            gpts[name].free()
+            # scales = act_scales[f"model.layers.{i}.{name}"]
+            # gpts[name].scales = scales
+            # gpts[name].scales = None
+            # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+            # gpts[name].free()
 
         for j in range(args.nsamples):
             outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
