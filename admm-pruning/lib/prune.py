@@ -281,13 +281,13 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
     # dataloader, _ = get_loaders("c4",nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
     dataloader, _ = get_loaders('wikitext2',nsamples=args.nsamples,seed=args.seed,seqlen=model.seqlen,tokenizer=tokenizer)
     # act_scales = torch.load("/home/LLM_Compression/QUIK/experiments/act_scales/Llama-2-7b-hf.pt")
-    outlier_cols_num = 128
+    # outlier_cols_num = 128
 
     use_cache = model.config.use_cache
     model.config.use_cache = False
     layers = model.model.layers
 
-    std_dict = {}
+    outputs_stat_dict = {}
 
     if "model.embed_tokens" in model.hf_device_map:
         dev = model.hf_device_map["model.embed_tokens"]
@@ -357,50 +357,55 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
 
         for name in gpts:
             print(i, name, datetime.now())
-            # w = gpts[name].layer.weight.data
-            # scales = act_scales[f"model.layers.{i}.{name}"].to(device=dev, dtype=w.dtype)
-            # w_scales = w.abs().max(dim=0)[0]
-            # outlier_cols_inds = scales.sort(descending=True)[1][-outlier_cols_num:]
-            # mask = torch.ones_like(scales, dtype=torch.bool)
-            # mask[outlier_cols_inds] = False
-            # S = w * mask
 
-            # outlier_mask = get_outlier_mask(w)
-            # S = w * (~outlier_mask)
-            # smooth_scale = (scales ** 1/2) / (w_scales ** 1/2)
-            # S = w * smooth_scale
+            if args.outlier_fraction > 0:
+                w = gpts[name].layer.weight.data
+                # scales = act_scales[f"model.layers.{i}.{name}"].to(device=dev, dtype=w.dtype)
+                # w_scales = w.abs().max(dim=0)[0]
+                # outlier_cols_inds = scales.sort(descending=True)[1][-outlier_cols_num:]
+                # mask = torch.ones_like(scales, dtype=torch.bool)
+                # mask[outlier_cols_inds] = False
+                # S = w * mask
 
-            # gpts[name].layer.weight.data = S
-            gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
-            # gpts[name].layer.weight.data += w * (~mask)
-            # gpts[name].layer.weight.data += w * outlier_mask
-            # w = gpts[name].layer.weight.data / smooth_scale
-            # gpts[name].layer.weight.data = w
-            gpts[name].free()
+                outlier_mask = get_outlier_mask(w, outlier_fraction=args.outlier_fraction)
+                S = w * (~outlier_mask)
+                # smooth_scale = (scales ** 1/2) / (w_scales ** 1/2)
+                # S = w * smooth_scale
 
-            # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
-            # gpts[name].free()
-           
-            # w = gpts[name].layer.weight.data
-            # L, R = low_rank_decomposition(w, rank_ratio=0.125)
-            # S = w - L @ R
-            # gpts[name].layer.weight.data = S
-            # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
-            # gpts[name].layer.weight.data += L @ R
-            # gpts[name].free()
+                gpts[name].layer.weight.data = S
+                gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+                # gpts[name].layer.weight.data += w * (~mask)
+                gpts[name].layer.weight.data += w * outlier_mask
+                # w = gpts[name].layer.weight.data / smooth_scale
+                # gpts[name].layer.weight.data = w
+                gpts[name].free()
 
-            # w = gpts[name].layer.weight.data
-            # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
-            # S = gpts[name].layer.weight.data
-            # L, R = low_rank_decomposition(w - S, rank_ratio=0.125)
-            # gpts[name].layer.weight.data = S + L @ R
-            # gpts[name].free()
+                # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+                # gpts[name].free()
+            
+                # w = gpts[name].layer.weight.data
+                # L, R = low_rank_decomposition(w, rank_ratio=0.125)
+                # S = w - L @ R
+                # gpts[name].layer.weight.data = S
+                # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+                # gpts[name].layer.weight.data += L @ R
+                # gpts[name].free()
 
-            # scales = act_scales[f"model.layers.{i}.{name}"]
-            # gpts[name].scales = scales
-            # gpts[name].scales = None
-            # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
-            # gpts[name].free()
+                # w = gpts[name].layer.weight.data
+                # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+                # S = gpts[name].layer.weight.data
+                # L, R = low_rank_decomposition(w - S, rank_ratio=0.125)
+                # gpts[name].layer.weight.data = S + L @ R
+                # gpts[name].free()
+
+                # scales = act_scales[f"model.layers.{i}.{name}"]
+                # gpts[name].scales = scales
+                # gpts[name].scales = None
+                # gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+                # gpts[name].free()
+            else:
+                gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
+                gpts[name].free()
 
         for j in range(args.nsamples):
             outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
@@ -408,19 +413,27 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
         layers[i] = layer 
         torch.cuda.empty_cache()
 
-        std_between_outs = torch.std(outs_orig - outs)
-        std_dict[i] = std_between_outs.to('cpu')
+        mse_between_outs = torch.nn.functional.mse_loss(outs, outs_orig, reduction='mean')
+        
+        outs_res = (outs - outs_orig)
+        cos_between_outs = torch.mean(torch.sum(outs_res * outs_res, dim=0) / (torch.norm(outs_res, dim=0) ** 2))
+        
+        outputs_stat_dict[i] = {
+            'mse_between_outs': mse_between_outs.to('cpu'),
+            'cos_between_outs': cos_between_outs.to('cpu'),
+            'std_outs': torch.std(outs).to('cpu'),
+            'std_outs_orig': torch.std(outs_orig).to('cpu')
+        }
 
         inps, outs = outs, inps
         inps_orig, outs_orig = outs_orig, inps_orig
 
 
-
     model.config.use_cache = use_cache
     torch.cuda.empty_cache()
-    file_path = Path(args.save) / 'std_outs_dict.pt'
+    file_path = Path(args.save) / 'outputs_stat_dict.pt'
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(std_dict, file_path)
+    torch.save(outputs_stat_dict, file_path)
 
 
 
