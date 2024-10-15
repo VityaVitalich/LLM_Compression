@@ -413,21 +413,30 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
         layers[i] = layer 
         torch.cuda.empty_cache()
 
-        mse_between_outs = torch.nn.functional.mse_loss(outs, outs_orig, reduction='mean')
+        outs_batch_size, outs_seq_len, outs_nfeatures = outs.shape
+        mse_between_outs = torch.nn.functional.mse_loss(
+            outs.view(outs_batch_size * outs_seq_len, outs_nfeatures).float(),
+            outs_orig.view(outs_batch_size * outs_seq_len, outs_nfeatures).float(), 
+        reduction='mean')
         
-        outs_res = (outs - outs_orig)
-        cos_between_outs = torch.mean(torch.sum(outs_res * outs_res, dim=0) / (torch.norm(outs_res, dim=0) ** 2))
-        
+        # outs_res = (outs - outs_orig)
+        cos_between_outs = torch.mean(
+            torch.sum(outs.view(outs_batch_size * outs_seq_len, outs_nfeatures).float() * 
+                      outs_orig.view(outs_batch_size * outs_seq_len, outs_nfeatures).float(), 
+                      dim=0) / 
+            (torch.norm(outs.view(outs_batch_size * outs_seq_len, outs_nfeatures), dim=0).float() * 
+             torch.norm(outs_orig.view(outs_batch_size * outs_seq_len, outs_nfeatures), dim=0).float())
+        )
+
         outputs_stat_dict[i] = {
             'mse_between_outs': mse_between_outs.to('cpu'),
             'cos_between_outs': cos_between_outs.to('cpu'),
-            'std_outs': torch.std(outs).to('cpu'),
-            'std_outs_orig': torch.std(outs_orig).to('cpu')
+            'std_outs': torch.std(outs.float()).to('cpu'),
+            'std_outs_orig': torch.std(outs_orig.float()).to('cpu')
         }
 
         inps, outs = outs, inps
         inps_orig, outs_orig = outs_orig, inps_orig
-
 
     model.config.use_cache = use_cache
     torch.cuda.empty_cache()
